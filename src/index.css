@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-feature-settings: "ss01", "ss02", "cv01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbar for modern browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f8eef0;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4a5b0;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b76e79;
+}
+
+/* Glassmorphism styling */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(243, 214, 222, 0.7);
+}
+
+.glass-panel-luxury {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(254, 244, 246, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(228, 187, 197, 0.6);
+  box-shadow: 0 20px 40px -15px rgba(183, 110, 121, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+}
+
+/* Subtle luxury gradient text */
+.text-gradient-rose {
+  background: linear-gradient(135deg, #a8325a 0%, #b76e79 50%, #8b4352 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #c5a059 0%, #e0b86c 50%, #9e7b37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
