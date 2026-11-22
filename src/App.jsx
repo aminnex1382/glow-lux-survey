@@ -32,6 +32,7 @@ export default function App() {
   const [answers, setAnswers] = useState({});
   const [responses, setResponses] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastSubmittedId, setLastSubmittedId] = useState(null);
 
   // Sync with URL hash changes (when user manually types the slug into the address bar)
   useEffect(() => {
@@ -72,7 +73,10 @@ export default function App() {
   const handleSubmitSurvey = async () => {
     setIsSubmitting(true);
     try {
-      await surveyApi.submitResponse(answers);
+      const res = await surveyApi.submitResponse(answers);
+      if (res?.savedItem?.id) {
+        setLastSubmittedId(res.savedItem.id);
+      }
       await loadResponses();
       setSurveyStep('completed');
     } catch (err) {
@@ -82,8 +86,14 @@ export default function App() {
     }
   };
 
+  const handleSaveContact = async (contactData) => {
+    await surveyApi.saveContactInfo(lastSubmittedId, contactData);
+    await loadResponses();
+  };
+
   const handleResetSurvey = () => {
     setAnswers({});
+    setLastSubmittedId(null);
     setSurveyStep('wizard');
   };
 
@@ -128,7 +138,10 @@ export default function App() {
             )}
 
             {surveyStep === 'completed' && (
-              <CompletionView onReset={handleResetSurvey} />
+              <CompletionView 
+                onReset={handleResetSurvey} 
+                onSaveContact={handleSaveContact}
+              />
             )}
           </>
         )}

@@ -4,7 +4,6 @@ import {
   Users, 
   Download, 
   Upload, 
-  RotateCcw, 
   RefreshCw, 
   ArrowRight, 
   MessageSquare, 
@@ -14,18 +13,39 @@ import {
   Copy,
   Trash2,
   Calendar,
-  Sparkles
+  Sparkles,
+  Phone,
+  User,
+  PhoneCall,
+  Search,
+  ExternalLink
 } from 'lucide-react';
 import { QUESTIONS, SURVEY_INFO } from '../data/questions';
 import { surveyApi } from '../services/api';
 
 export default function AdminDashboard({ responses, onRefresh, onBackToSurvey }) {
-  const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'rawJson'
+  const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'leads' | 'rawJson'
   const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedPhoneIdx, setCopiedPhoneIdx] = useState(null);
+  const [copiedAllPhones, setCopiedAllPhones] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [contactSearch, setContactSearch] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
   const totalParticipants = responses.length;
+
+  // Filter respondents who provided contact info
+  const leads = useMemo(() => {
+    return responses
+      .filter(r => r.contact && (r.contact.fullName || r.contact.phone))
+      .map(r => ({
+        id: r.id,
+        fullName: r.contact.fullName || 'ثبت نشده',
+        phone: r.contact.phone || 'ثبت نشده',
+        savedAt: r.contact.savedAt || r.submittedAt,
+        answers: r.answers || {}
+      }));
+  }, [responses]);
 
   // Compute analytics for each question
   const analytics = useMemo(() => {
@@ -78,7 +98,8 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
           .map(r => ({
             id: r.id,
             text: r.answers?.[q.id] || '',
-            date: r.submittedAt
+            date: r.submittedAt,
+            contactName: r.contact?.fullName || null
           }))
           .filter(item => item.text && item.text.trim().length > 0);
 
@@ -122,6 +143,19 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
     setTimeout(() => setCopiedJson(false), 2000);
   };
 
+  const handleCopyPhone = (phoneNumber, idx) => {
+    navigator.clipboard.writeText(phoneNumber);
+    setCopiedPhoneIdx(idx);
+    setTimeout(() => setCopiedPhoneIdx(null), 2000);
+  };
+
+  const handleCopyAllPhones = () => {
+    const phoneList = leads.map(l => l.phone).filter(p => p !== 'ثبت نشده').join('\n');
+    navigator.clipboard.writeText(phoneList);
+    setCopiedAllPhones(true);
+    setTimeout(() => setCopiedAllPhones(false), 2500);
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return 'نامشخص';
     try {
@@ -143,6 +177,12 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
     item.text.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  // Filter leads
+  const filteredLeads = leads.filter(l => 
+    l.fullName.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    l.phone.includes(contactSearch)
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in">
       {/* Top Banner & Header */}
@@ -162,7 +202,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            آمار تفکیکی پاسخ‌ها بر اساس سوالات چندگزینه‌ای و نظرات ثبت شده در فایل JSON
+            آمار تفکیکی پاسخ‌ها، نظرات ثبت شده و اطلاعات تماس داوطلبانه مخاطبان
           </p>
         </div>
 
@@ -218,7 +258,20 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
 
         <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500">نظرات و پیشنهادات تایپی</span>
+            <span className="text-xs font-bold text-slate-500">مخاطبان ثبت اطلاعات تماس (لید)</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Phone className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-amber-700 font-mono">
+            {leads.length}
+            <span className="text-xs font-normal text-slate-500 mr-2">شماره تماس</span>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500">نظرات و پیشنهادات متنی</span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <MessageSquare className="w-4 h-4" />
             </div>
@@ -228,29 +281,13 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
             <span className="text-xs font-normal text-slate-500 mr-2">دیدگاه</span>
           </div>
         </div>
-
-        <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500">وضعیت ذخیره‌سازی داده‌ها</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-sm font-bold text-emerald-700 flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>پایگاه داده JSON آنلاین</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            ذخیره خودکار در data/responses.json
-          </p>
-        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-3 border-b border-rose-200/80 mb-6">
+      <div className="flex items-center gap-3 border-b border-rose-200/80 mb-6 overflow-x-auto">
         <button
           onClick={() => setActiveTab('stats')}
-          className={`pb-3 text-sm font-bold transition relative ${
+          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative ${
             activeTab === 'stats' 
               ? 'text-rose-700 border-b-2 border-rose-600' 
               : 'text-slate-500 hover:text-slate-800'
@@ -260,8 +297,23 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
         </button>
 
         <button
+          onClick={() => setActiveTab('leads')}
+          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
+            activeTab === 'leads' 
+              ? 'text-rose-700 border-b-2 border-rose-600' 
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Phone className="w-4 h-4" />
+          <span>اطلاعات تماس مخاطبان</span>
+          <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1">
+            {leads.length}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('rawJson')}
-          className={`pb-3 text-sm font-bold transition relative flex items-center gap-1.5 ${
+          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
             activeTab === 'rawJson' 
               ? 'text-rose-700 border-b-2 border-rose-600' 
               : 'text-slate-500 hover:text-slate-800'
@@ -394,7 +446,11 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                             <Calendar className="w-3 h-3" />
                             {formatDate(item.date)}
                           </span>
-                          <span className="font-mono text-[10px]">#{fIdx + 1}</span>
+                          {item.contactName && (
+                            <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              {item.contactName}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
                           {item.text}
@@ -409,12 +465,138 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
         </div>
       )}
 
-      {/* TAB 2: Raw JSON View */}
+      {/* TAB 2: Contact Leads (Name & Phone Numbers) */}
+      {activeTab === 'leads' && (
+        <div className="space-y-4">
+          {/* Leads Toolbar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/80 p-4 rounded-2xl border border-rose-100 shadow-sm">
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                placeholder="جستجو بر اساس نام یا شماره تماس..."
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                className="w-full pr-8 pl-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            </div>
+
+            {leads.length > 0 && (
+              <button
+                onClick={handleCopyAllPhones}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200 flex items-center justify-center gap-1.5 transition"
+              >
+                {copiedAllPhones ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تمامی شماره‌ها کپی شدند!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>کپی لیست شماره‌ها (جهت ارسال پیامک)</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Leads Cards Grid */}
+          {filteredLeads.length === 0 ? (
+            <div className="glass-panel rounded-2xl p-12 text-center text-slate-400 text-sm border border-slate-200">
+              {leads.length === 0 
+                ? 'هنوز هیچ مخاطبی اطلاعات تماس خود را وارد نکرده است.' 
+                : 'موردی مطابق با جستجوی شما یافت نشد.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredLeads.map((lead, idx) => (
+                <div 
+                  key={lead.id || idx}
+                  className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-rose-100 hover:border-rose-300 transition"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-100 to-amber-100 flex items-center justify-center text-rose-700 font-bold text-sm">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-slate-800">
+                          {lead.fullName}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(lead.savedAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                      #{idx + 1}
+                    </span>
+                  </div>
+
+                  {/* Phone action box */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-1.5 text-xs sm:text-sm font-mono font-bold text-slate-800" dir="ltr">
+                      <Phone className="w-3.5 h-3.5 text-rose-600" />
+                      <span>{lead.phone}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleCopyPhone(lead.phone, idx)}
+                        className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-600 flex items-center gap-1 transition"
+                      >
+                        {copiedPhoneIdx === idx ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span className="text-emerald-700">کپی شد</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>کپی</span>
+                          </>
+                        )}
+                      </button>
+
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="p-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition"
+                        title="تماس مستقیم"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Highlights from survey */}
+                  <div className="text-[11px] text-slate-600 space-y-1 bg-white/70 p-2.5 rounded-xl border border-rose-50">
+                    <p className="font-bold text-[10px] text-slate-400">گزیده‌ای از پاسخ‌های ثبت‌شده:</p>
+                    {lead.answers.q1 && (
+                      <p className="truncate">▫️ <strong>دغدغه اندام:</strong> {lead.answers.q1}</p>
+                    )}
+                    {lead.answers.q5 && (
+                      <p className="truncate">▫️ <strong>دغدغه مو:</strong> {lead.answers.q5}</p>
+                    )}
+                    {lead.answers.q10 && (
+                      <p className="truncate text-rose-700 font-medium">▫️ <strong>نظر کاربر:</strong> {lead.answers.q10}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: Raw JSON View */}
       {activeTab === 'rawJson' && (
         <div className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-slate-600 font-mono">
-              data/responses.json ({responses.length} آیتم)
+              data/responses.json ({responses.length} آیتم شامل مشخصات تماس)
             </span>
             <button
               onClick={handleCopyJson}

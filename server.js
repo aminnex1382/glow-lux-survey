@@ -52,7 +52,7 @@ app.get('/api/responses', (req, res) => {
 // POST a new response
 app.post('/api/responses', (req, res) => {
   try {
-    const { answers } = req.body;
+    const { answers, contact } = req.body;
     if (!answers || typeof answers !== 'object') {
       return res.status(400).json({ success: false, message: 'Invalid payload: answers object required.' });
     }
@@ -61,7 +61,8 @@ app.post('/api/responses', (req, res) => {
     const newEntry = {
       id: 'resp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       submittedAt: new Date().toISOString(),
-      answers
+      answers,
+      contact: contact || null
     };
 
     responses.push(newEntry);
@@ -78,6 +79,32 @@ app.post('/api/responses', (req, res) => {
   } catch (err) {
     console.error('Failed to save response:', err);
     res.status(500).json({ success: false, message: 'خطا در ذخیره اطلاعات در سرور' });
+  }
+});
+
+// POST / PATCH contact info for a specific response
+app.post('/api/responses/:id/contact', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fullName, phone } = req.body;
+    const responses = getResponses();
+    const index = responses.findIndex(r => r.id === id);
+
+    if (index !== -1) {
+      responses[index].contact = {
+        fullName: fullName || '',
+        phone: phone || '',
+        savedAt: new Date().toISOString()
+      };
+      saveResponses(responses);
+      console.log(`[${new Date().toLocaleTimeString('fa-IR')}] اطلاعات تماس برای ${id} به روز شد: ${fullName} (${phone})`);
+      return res.json({ success: true, message: 'اطلاعات تماس با موفقیت ثبت شد.', data: responses[index] });
+    }
+
+    res.status(404).json({ success: false, message: 'پاسخ مورد نظر یافت نشد.' });
+  } catch (err) {
+    console.error('Failed to update contact:', err);
+    res.status(500).json({ success: false, message: 'خطا در ذخیره اطلاعات تماس' });
   }
 });
 

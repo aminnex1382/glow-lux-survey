@@ -14,6 +14,11 @@ const INITIAL_FALLBACK_DATA = [
       "q8": "خیلی زیاد، دنبالش هستم",
       "q9": "همه موارد",
       "q10": "کانال بسیار عالی و با کلاسی دارید. لطفاً بیشتر در مورد مکمل‌های کلاژن و روتین پوستی روز و شب توضیح بدید."
+    },
+    "contact": {
+      "fullName": "مریم رضایی",
+      "phone": "09123456789",
+      "savedAt": "2026-11-22T14:32:00.000Z"
     }
   },
   {
@@ -30,6 +35,11 @@ const INITIAL_FALLBACK_DATA = [
       "q8": "دوست داری بیشتر بدونم",
       "q9": "یادگیری مهارت‌های جدید",
       "q10": "معرفی محصولات گیاهی و بدون عوارض رو در اولویت قرار بدید ممنون از زحماتتون."
+    },
+    "contact": {
+      "fullName": "سارا محمدی",
+      "phone": "09351234567",
+      "savedAt": "2026-11-22T18:17:00.000Z"
     }
   },
   {
@@ -46,11 +56,12 @@ const INITIAL_FALLBACK_DATA = [
       "q8": "خیلی زیاد، دنبالش هستم",
       "q9": "درآمد و استقلال مالی",
       "q10": "اگر امکانش هست برای تیرگی نواحی بدن کرم‌های تست شده و تضمینی معرفی کنید."
-    }
+    },
+    "contact": null
   }
 ];
 
-const STORAGE_KEY = 'glow_lux_survey_responses';
+const STORAGE_KEY = 'glow_lux_survey_responses_v2';
 
 function getLocalData() {
   try {
@@ -92,7 +103,7 @@ export const surveyApi = {
   },
 
   // Submit response
-  async submitResponse(answers) {
+  async submitResponse(answers, contact = null) {
     let serverSuccess = false;
     let savedItem = null;
 
@@ -100,7 +111,7 @@ export const surveyApi = {
       const res = await fetch('/api/responses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers })
+        body: JSON.stringify({ answers, contact })
       });
       if (res.ok) {
         const json = await res.json();
@@ -116,18 +127,59 @@ export const surveyApi = {
     const newEntry = savedItem || {
       id: 'resp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       submittedAt: new Date().toISOString(),
-      answers
+      answers,
+      contact: contact || null
     };
     
     // Check if not already in local array
-    if (!local.find(item => item.id === newEntry.id)) {
+    const existingIndex = local.findIndex(item => item.id === newEntry.id);
+    if (existingIndex === -1) {
       local.push(newEntry);
+    } else {
+      local[existingIndex] = newEntry;
+    }
+    saveLocalData(local);
+
+    return {
+      success: true,
+      savedItem: newEntry,
+      source: serverSuccess ? 'server' : 'local'
+    };
+  },
+
+  // Save / Update contact info for an existing response
+  async saveContactInfo(responseId, contactData) {
+    let serverSuccess = false;
+
+    if (responseId) {
+      try {
+        const res = await fetch(`/api/responses/${responseId}/contact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(contactData)
+        });
+        if (res.ok) {
+          serverSuccess = true;
+        }
+      } catch (err) {
+        console.warn('Backend contact update failed, saving locally.');
+      }
+    }
+
+    // Update in local storage
+    const local = getLocalData();
+    const target = local.find(item => item.id === responseId) || local[local.length - 1];
+    if (target) {
+      target.contact = {
+        fullName: contactData.fullName || '',
+        phone: contactData.phone || '',
+        savedAt: new Date().toISOString()
+      };
       saveLocalData(local);
     }
 
     return {
       success: true,
-      savedItem: newEntry,
       source: serverSuccess ? 'server' : 'local'
     };
   },
