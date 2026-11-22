@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Heart, Sparkles, BarChart3, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Sparkles, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
-export default function CompletionView({ onReset, onOpenAdmin }) {
+export default function CompletionView({ onReset }) {
   useEffect(() => {
     // Fire beautiful festive confetti in rose and gold colors
     const end = Date.now() + 1.5 * 1000;
@@ -58,20 +58,12 @@ export default function CompletionView({ onReset, onOpenAdmin }) {
           دقیقاً بر اساس نیازها و دغدغه‌های واقعی شما عزیزان توسعه یابد.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={onOpenAdmin}
-            className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#e54576] to-[#b76e79] hover:from-[#d1295d] hover:to-[#9f5762] text-white font-bold text-sm shadow-glow-soft hover:shadow-glow-hover transition flex items-center justify-center gap-2"
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>مشاهده صفحه آمار و نتایج نظرسنجی</span>
-          </button>
-
+        <div className="flex justify-center">
           <button
             onClick={onReset}
-            className="w-full sm:w-auto px-5 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm border border-slate-200 shadow-sm transition flex items-center justify-center gap-2"
+            className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#e54576] to-[#b76e79] hover:from-[#d1295d] hover:to-[#9f5762] text-white font-bold text-sm shadow-glow-soft hover:shadow-glow-hover transition flex items-center justify-center gap-2"
           >
-            <RotateCcw className="w-4 h-4 text-slate-500" />
+            <RotateCcw className="w-4 h-4" />
             <span>ثبت نظر جدید</span>
           </button>
         </div>

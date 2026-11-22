@@ -1,8 +1,8 @@
 import React from 'react';
-import { Sparkles, Clock, ShieldCheck, Heart, ArrowLeft, BarChart2, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
-export default function WelcomeView({ onStart, onOpenAdmin, responseCount }) {
+export default function WelcomeView({ onStart }) {
   const sections = [
     { title: "سلامت و تناسب اندام", icon: "🌿" },
     { title: "سلامت دهان و دندان", icon: "✨" },
@@ -84,21 +84,13 @@ export default function WelcomeView({ onStart, onOpenAdmin, responseCount }) {
         </div>
 
         {/* Primary CTA Button */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="flex justify-center">
           <button
             onClick={onStart}
-            className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-[#e54576] to-[#b76e79] hover:from-[#d1295d] hover:to-[#9f5762] text-white font-bold text-base shadow-glow-soft hover:shadow-glow-hover active:scale-[0.98] transition-all flex items-center justify-center gap-2 group"
+            className="w-full sm:w-auto min-w-[240px] px-8 py-4 rounded-2xl bg-gradient-to-r from-[#e54576] to-[#b76e79] hover:from-[#d1295d] hover:to-[#9f5762] text-white font-bold text-base shadow-glow-soft hover:shadow-glow-hover active:scale-[0.98] transition-all flex items-center justify-center gap-2 group"
           >
             <span>شروع نظرسنجی</span>
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          </button>
-
-          <button
-            onClick={onOpenAdmin}
-            className="w-full sm:w-auto px-5 py-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm border border-slate-200 shadow-sm hover:border-rose-200 transition flex items-center justify-center gap-2"
-          >
-            <BarChart2 className="w-4 h-4 text-rose-500" />
-            <span>مشاهده گزارش نتایج ({responseCount || 0})</span>
           </button>
         </div>
       </div>
