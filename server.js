@@ -100,10 +100,11 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n==========================================`);
   console.log(`✨ سرور ذخیره‌سازی داده‌های نظرسنجی GLOW LUX فعال شد.`);
   console.log(`📡 پورت سرور API: http://localhost:${PORT}`);
+  console.log(`📱 دسترسی شبکه: http://10.140.123.115:${PORT}`);
   console.log(`📁 مسیر فایل داده‌ها: ${DATA_FILE}`);
   console.log(`==========================================\n`);
 });
