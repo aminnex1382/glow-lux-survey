@@ -1,8 +1,8 @@
 import React from 'react';
-import { Sparkles, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Sparkles, Clock, ShieldCheck, ArrowLeft, UserCheck } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
-export default function WelcomeView({ onStart }) {
+export default function WelcomeView({ onStart, personalizedUser }) {
   const sections = [
     { title: "سلامت و تناسب اندام", icon: "🌿" },
     { title: "سلامت دهان و دندان", icon: "✨" },
@@ -19,6 +19,23 @@ export default function WelcomeView({ onStart }) {
         {/* Soft decorative background glows */}
         <div className="absolute -top-20 -left-20 w-48 h-48 bg-rose-200/40 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -right-20 w-48 h-48 bg-rose-300/30 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Personalized Welcome Badge if entered via VIP personalized link */}
+        {personalizedUser && personalizedUser.name && (
+          <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 border border-amber-200/80 shadow-sm animate-fade-in text-right flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
+                دعوت‌نامه اختصاصی GLOW LUX
+              </p>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-800">
+                سلام {personalizedUser.name} عزیز، به نظرسنجی اختصاصی خوش آمدید 🌸
+              </h2>
+            </div>
+          </div>
+        )}
 
         {/* Brand Emblem */}
         <div className="inline-flex items-center justify-center mb-5 relative">
@@ -40,8 +57,16 @@ export default function WelcomeView({ onStart }) {
 
         {/* Welcome Message */}
         <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg mx-auto mb-8 font-normal">
-          سلام به شما همراه عزیز و ارزشمند کانال 🌸
-          دیدگاه‌های شما راهنمای اصلی ما در انتخاب برترین موضوعات آموزشی علمی و معرفی باکیفیت‌ترین محصولات بهداشتی و مراقبتی است.
+          {personalizedUser?.name ? (
+            <>
+              {personalizedUser.name} گرامی، دیدگاه‌ها و نیازهای شما برای ما اولویت ویژه دارد. پاسخ‌های شما مستقیماً توسط تیم تخصصی کانال بررسی خواهد شد.
+            </>
+          ) : (
+            <>
+              سلام به شما همراه عزیز و ارزشمند کانال 🌸
+              دیدگاه‌های شما راهنمای اصلی ما در انتخاب برترین موضوعات آموزشی علمی و معرفی باکیفیت‌ترین محصولات بهداشتی و مراقبتی است.
+            </>
+          )}
         </p>
 
         {/* Feature Badges */}
@@ -61,8 +86,12 @@ export default function WelcomeView({ onStart }) {
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800">کاملاً محرمانه و بی‌نام</p>
-              <p className="text-[11px] text-slate-500">بدون نیاز به نام یا شماره تماس</p>
+              <p className="text-xs font-bold text-slate-800">
+                {personalizedUser ? 'ثبت مستقیم و اختصاصی' : 'کاملاً محرمانه و بی‌نام'}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {personalizedUser ? 'بدون نیاز به ثبت مجدد مشخصات' : 'بدون نیاز به نام یا شماره تماس'}
+              </p>
             </div>
           </div>
         </div>

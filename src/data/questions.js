@@ -7,7 +7,7 @@ export const SURVEY_INFO = {
   privacyNotice: "این نظرسنجی کاملاً بی‌نام بوده و نیازی به وارد کردن هیچ‌گونه اطلاعات فردی (مانند نام یا شماره تماس) نیست."
 };
 
-export const QUESTIONS = [
+export const DEFAULT_QUESTIONS = [
   {
     id: "q1",
     section: "بخش اول: سلامت و تناسب اندام",
@@ -142,3 +142,37 @@ export const QUESTIONS = [
     required: false
   }
 ];
+
+export const QUESTIONS = DEFAULT_QUESTIONS;
+
+const QUESTIONS_STORAGE_KEY = 'glow_lux_survey_questions_v1';
+
+export function getDynamicQuestions() {
+  try {
+    const raw = localStorage.getItem(QUESTIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load dynamic questions:', e);
+  }
+  return DEFAULT_QUESTIONS;
+}
+
+export function saveDynamicQuestions(questionsList) {
+  try {
+    localStorage.setItem(QUESTIONS_STORAGE_KEY, JSON.stringify(questionsList));
+  } catch (e) {
+    console.error('Failed to save dynamic questions:', e);
+  }
+}
+
+export function resetDynamicQuestions() {
+  try {
+    localStorage.removeItem(QUESTIONS_STORAGE_KEY);
+  } catch (e) {}
+  return DEFAULT_QUESTIONS;
+}

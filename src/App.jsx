@@ -5,10 +5,43 @@ import QuestionWizard from './components/QuestionWizard';
 import CompletionView from './components/CompletionView';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
-import { QUESTIONS, SURVEY_INFO } from './data/questions';
+import { 
+  SURVEY_INFO, 
+  getDynamicQuestions, 
+  saveDynamicQuestions, 
+  resetDynamicQuestions 
+} from './data/questions';
 import { surveyApi } from './services/api';
 import { securityService } from './services/security';
 import { Heart } from 'lucide-react';
+
+// Helper to extract personalized recipient from URL parameters
+function parsePersonalizedParams() {
+  try {
+    // Check search params from URL: ?name=...&ref=...
+    const urlParams = new URLSearchParams(window.location.search);
+    let name = urlParams.get('name');
+    let refId = urlParams.get('ref') || '';
+
+    // Also check hash for parameters: #/?name=...&ref=...
+    const hash = window.location.hash || '';
+    if (!name && hash.includes('?')) {
+      const hashParams = new URLSearchParams(hash.substring(hash.indexOf('?')));
+      name = hashParams.get('name');
+      refId = hashParams.get('ref') || refId;
+    }
+
+    if (name && name.trim()) {
+      return {
+        name: decodeURIComponent(name.trim()),
+        refId: refId.trim()
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to parse personalized link params:', e);
+  }
+  return null;
+}
 
 export default function App() {
   // Check if current URL slug is the secret admin path
@@ -34,13 +67,16 @@ export default function App() {
   const [surveyStep, setSurveyStep] = useState('welcome'); // 'welcome' | 'wizard' | 'completed'
   const [answers, setAnswers] = useState({});
   const [responses, setResponses] = useState([]);
+  const [questions, setQuestions] = useState(getDynamicQuestions);
+  const [personalizedUser, setPersonalizedUser] = useState(parsePersonalizedParams);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmittedId, setLastSubmittedId] = useState(null);
 
-  // Sync with URL hash changes (when user manually types the slug into the address bar)
+  // Sync with URL hash changes
   useEffect(() => {
     const handleUrlChange = () => {
       setIsAdminMode(checkIsAdminSlug());
+      setPersonalizedUser(parsePersonalizedParams());
     };
 
     window.addEventListener('hashchange', handleUrlChange);
@@ -61,6 +97,17 @@ export default function App() {
     loadResponses();
   }, [loadResponses]);
 
+  // Dynamic Question management handlers
+  const handleUpdateQuestions = (newQuestions) => {
+    saveDynamicQuestions(newQuestions);
+    setQuestions(newQuestions);
+  };
+
+  const handleResetQuestions = () => {
+    const defaults = resetDynamicQuestions();
+    setQuestions(defaults);
+  };
+
   const handleAnswerChange = (questionId, value) => {
     setAnswers(prev => ({
       ...prev,
@@ -76,7 +123,13 @@ export default function App() {
   const handleSubmitSurvey = async () => {
     setIsSubmitting(true);
     try {
-      const res = await surveyApi.submitResponse(answers);
+      const metadata = personalizedUser ? {
+        isPersonalized: true,
+        recipientName: personalizedUser.name,
+        refId: personalizedUser.refId
+      } : null;
+
+      const res = await surveyApi.submitResponse(answers, null, metadata, questions);
       if (res?.savedItem?.id) {
         setLastSubmittedId(res.savedItem.id);
       }
@@ -90,7 +143,7 @@ export default function App() {
   };
 
   const handleSaveContact = async (contactData) => {
-    await surveyApi.saveContactInfo(lastSubmittedId, contactData);
+    await surveyApi.saveContactInfo(lastSubmittedId, contactData, questions);
     await loadResponses();
   };
 
@@ -122,7 +175,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 pb-12">
         {isAdminMode ? (
-          // Admin View: Guarded by Password Authentication Gate
+          // Admin View: Protected by Password Gate
           !isAdminAuthenticated ? (
             <AdminLogin
               onLoginSuccess={() => setIsAdminAuthenticated(true)}
@@ -131,21 +184,27 @@ export default function App() {
           ) : (
             <AdminDashboard
               responses={responses}
+              questions={questions}
+              onUpdateQuestions={handleUpdateQuestions}
+              onResetQuestions={handleResetQuestions}
               onRefresh={loadResponses}
               onBackToSurvey={handleExitAdmin}
               onLogout={handleAdminLogout}
             />
           )
         ) : (
-          // Regular visitors flow: Clean survey
+          // Regular or Personalized Visitor Flow
           <>
             {surveyStep === 'welcome' && (
-              <WelcomeView onStart={handleStartSurvey} />
+              <WelcomeView 
+                onStart={handleStartSurvey}
+                personalizedUser={personalizedUser}
+              />
             )}
 
             {surveyStep === 'wizard' && (
               <QuestionWizard
-                questions={QUESTIONS}
+                questions={questions}
                 answers={answers}
                 onAnswerChange={handleAnswerChange}
                 onSubmit={handleSubmitSurvey}
@@ -157,6 +216,7 @@ export default function App() {
               <CompletionView 
                 onReset={handleResetSurvey} 
                 onSaveContact={handleSaveContact}
+                personalizedUser={personalizedUser}
               />
             )}
           </>

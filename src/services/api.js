@@ -1,10 +1,10 @@
-// API and Data Persistence Service (Secure & Sanitized)
+// API and Data Persistence Service (Secure, Full Telegram Dispatch & Personalized Links)
 
-// Empty initial fallback data to prevent leaking any mock or real contacts in public repository
 const INITIAL_FALLBACK_DATA = [];
 
 const STORAGE_KEY = 'glow_lux_survey_vault_v3';
 const TELEGRAM_CONFIG_KEY = 'glow_lux_telegram_config';
+const PERSONALIZED_LINKS_KEY = 'glow_lux_personalized_links_v1';
 
 function getLocalData() {
   try {
@@ -26,36 +26,113 @@ function saveLocalData(data) {
   }
 }
 
-// Optional: Send private notification directly to Telegram if configured by admin
-async function dispatchTelegramNotification(answers, contact) {
+// Helper to chunk and send Telegram messages (respecting 4096 character limit)
+async function sendTelegramMessage(botToken, chatId, htmlText) {
+  const MAX_CHUNK = 3800;
+  if (htmlText.length <= MAX_CHUNK) {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: htmlText,
+        parse_mode: 'HTML'
+      })
+    });
+  } else {
+    // Split text into chunks
+    const lines = htmlText.split('\n');
+    let currentChunk = '';
+    for (const line of lines) {
+      if ((currentChunk + '\n' + line).length > MAX_CHUNK) {
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: currentChunk,
+            parse_mode: 'HTML'
+          })
+        });
+        currentChunk = line;
+      } else {
+        currentChunk += (currentChunk ? '\n' : '') + line;
+      }
+    }
+    if (currentChunk.trim()) {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: currentChunk,
+          parse_mode: 'HTML'
+        })
+      });
+    }
+  }
+}
+
+// Send COMPLETE and thorough details of all questions and answers to Telegram
+async function dispatchTelegramNotification(answers, contact, metadata, questions = []) {
   try {
     const rawConfig = localStorage.getItem(TELEGRAM_CONFIG_KEY);
     if (!rawConfig) return;
     const config = JSON.parse(rawConfig);
     if (!config.botToken || !config.chatId) return;
 
-    let text = `🌸 <b>پاسخ جدید در نظرسنجی GLOW LUX</b>\n\n`;
-    if (contact && (contact.fullName || contact.phone)) {
-      text += `👤 <b>نام:</b> ${contact.fullName || 'ثبت نشده'}\n`;
-      text += `📞 <b>شماره تماس:</b> ${contact.phone || 'ثبت نشده'}\n\n`;
-    }
-    text += `📋 <b>پاسخ‌های کلیدی:</b>\n`;
-    if (answers.q1) text += `▫️ دغدغه اندام: ${answers.q1}\n`;
-    if (answers.q5) text += `▫️ دغدغه مو: ${answers.q5}\n`;
-    if (answers.q6) text += `▫️ دغدغه پوست: ${answers.q6}\n`;
-    if (answers.q10) text += `\n💬 <b>نظر متنی:</b>\n${answers.q10}\n`;
-
-    await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: config.chatId,
-        text: text,
-        parse_mode: 'HTML'
-      })
+    const dateStr = new Date().toLocaleDateString('fa-IR', {
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
+
+    let header = `✨ <b>پاسخ جدید در نظرسنجی GLOW LUX</b> ✨\n`;
+    header += `📅 <b>زمان ثبت:</b> ${dateStr}\n`;
+    header += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (metadata?.isPersonalized && metadata?.recipientName) {
+      header += `🎯 <b>نوع پاسخ:</b> لینک اختصاصی ویژه 💎\n`;
+      header += `👤 <b>مخاطب اختصاصی:</b> <u>${metadata.recipientName}</u>\n`;
+      if (metadata.refId) {
+        header += `🆔 <b>شناسه لینک:</b> <code>${metadata.refId}</code>\n`;
+      }
+      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    } else if (contact && (contact.fullName || contact.phone)) {
+      header += `👤 <b>نام کاربر:</b> ${contact.fullName || 'ثبت نشده'}\n`;
+      header += `📞 <b>شماره تماس:</b> <code>${contact.phone || 'ثبت نشده'}</code>\n`;
+      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    } else {
+      header += `👤 <b>مخاطب:</b> عمومی (بدون ثبت شماره)\n`;
+      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    }
+
+    let questionsBody = `📋 <b>جزئیات کامل تمام پاسخ‌ها:</b>\n\n`;
+
+    if (Array.isArray(questions) && questions.length > 0) {
+      questions.forEach((q, idx) => {
+        const ans = answers[q.id];
+        const displayAnswer = ans && ans.trim() ? ans.trim() : '<i>(بدون پاسخ)</i>';
+        questionsBody += `<b>${idx + 1}. ${q.question}</b>\n`;
+        questionsBody += `👉 <b>پاسخ:</b> ${displayAnswer}\n\n`;
+      });
+    } else {
+      // Fallback if questions array not passed
+      Object.entries(answers).forEach(([key, val], idx) => {
+        if (val && val.trim()) {
+          questionsBody += `<b>سوال ${key}:</b> ${val.trim()}\n\n`;
+        }
+      });
+    }
+
+    questionsBody += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    questionsBody += `🌿 راز زیبایی ماندگار | از نگاه علم`;
+
+    const fullMessage = header + questionsBody;
+    await sendTelegramMessage(config.botToken, config.chatId, fullMessage);
   } catch (err) {
-    console.warn('Telegram notification skipped/failed:', err);
+    console.warn('Telegram full notification failed:', err);
   }
 }
 
@@ -71,14 +148,12 @@ export const surveyApi = {
           return { data: json.data, source: 'server' };
         }
       }
-    } catch (err) {
-      // Running on static GitHub Pages or server offline
-    }
+    } catch (err) {}
     return { data: getLocalData(), source: 'local' };
   },
 
-  // Submit response
-  async submitResponse(answers, contact = null) {
+  // Submit response with answers, optional contact, metadata (personalized link info), and questions definition
+  async submitResponse(answers, contact = null, metadata = null, questions = []) {
     let serverSuccess = false;
     let savedItem = null;
 
@@ -86,7 +161,7 @@ export const surveyApi = {
       const res = await fetch('/api/responses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, contact })
+        body: JSON.stringify({ answers, contact, metadata })
       });
       if (res.ok) {
         const json = await res.json();
@@ -101,14 +176,20 @@ export const surveyApi = {
       id: 'resp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       submittedAt: new Date().toISOString(),
       answers,
-      contact: contact || null
+      contact: contact || null,
+      metadata: metadata || null
     };
     
     local.push(newEntry);
     saveLocalData(local);
 
-    // Trigger Telegram alert if configured
-    dispatchTelegramNotification(answers, contact);
+    // If response was from a personalized link, mark it as answered
+    if (metadata?.refId) {
+      this.markPersonalizedLinkAnswered(metadata.refId, newEntry.id);
+    }
+
+    // Trigger full Telegram alert with all questions & answers
+    dispatchTelegramNotification(answers, contact, metadata, questions);
 
     return {
       success: true,
@@ -118,7 +199,7 @@ export const surveyApi = {
   },
 
   // Save / Update contact info for an existing response
-  async saveContactInfo(responseId, contactData) {
+  async saveContactInfo(responseId, contactData, questions = []) {
     let serverSuccess = false;
 
     if (responseId) {
@@ -145,8 +226,8 @@ export const surveyApi = {
       };
       saveLocalData(local);
 
-      // Trigger notification with contact info
-      dispatchTelegramNotification(target.answers || {}, target.contact);
+      // Re-trigger full Telegram notification with contact info
+      dispatchTelegramNotification(target.answers || {}, target.contact, target.metadata, questions);
     }
 
     return {
@@ -209,5 +290,58 @@ export const surveyApi = {
 
   saveTelegramConfig(config) {
     localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
+  },
+
+  // ==========================================
+  // Personalized Links Management
+  // ==========================================
+  getPersonalizedLinks() {
+    try {
+      const raw = localStorage.getItem(PERSONALIZED_LINKS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  savePersonalizedLinks(links) {
+    try {
+      localStorage.setItem(PERSONALIZED_LINKS_KEY, JSON.stringify(links));
+    } catch (e) {}
+  },
+
+  createPersonalizedLink(recipientName, note = '') {
+    const links = this.getPersonalizedLinks();
+    const refId = 'vip_' + Math.random().toString(36).substring(2, 8);
+    const newLink = {
+      id: refId,
+      recipientName: recipientName.trim(),
+      note: note.trim(),
+      createdAt: new Date().toISOString(),
+      isAnswered: false,
+      responseId: null,
+      answeredAt: null
+    };
+
+    links.unshift(newLink);
+    this.savePersonalizedLinks(links);
+    return newLink;
+  },
+
+  deletePersonalizedLink(id) {
+    const links = this.getPersonalizedLinks().filter(l => l.id !== id);
+    this.savePersonalizedLinks(links);
+    return links;
+  },
+
+  markPersonalizedLinkAnswered(refId, responseId) {
+    const links = this.getPersonalizedLinks();
+    const link = links.find(l => l.id === refId);
+    if (link) {
+      link.isAnswered = true;
+      link.responseId = responseId;
+      link.answeredAt = new Date().toISOString();
+      this.savePersonalizedLinks(links);
+    }
   }
 };

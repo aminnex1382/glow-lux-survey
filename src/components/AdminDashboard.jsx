@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart3, 
   Users, 
@@ -23,20 +23,48 @@ import {
   Send, 
   X,
   Settings,
-  Bell
+  Bell,
+  Link2,
+  Plus,
+  Edit3,
+  RotateCcw,
+  Share2,
+  UserCheck,
+  CheckCircle2,
+  Clock,
+  Layers
 } from 'lucide-react';
-import { QUESTIONS, SURVEY_INFO } from '../data/questions';
 import { surveyApi } from '../services/api';
 import { securityService } from '../services/security';
+import QuestionEditorModal from './QuestionEditorModal';
 
-export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, onLogout }) {
-  const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'leads' | 'rawJson'
+export default function AdminDashboard({ 
+  responses, 
+  questions, 
+  onUpdateQuestions,
+  onResetQuestions,
+  onRefresh, 
+  onBackToSurvey, 
+  onLogout 
+}) {
+  const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'leads' | 'links' | 'questions' | 'rawJson'
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedPhoneIdx, setCopiedPhoneIdx] = useState(null);
   const [copiedAllPhones, setCopiedAllPhones] = useState(false);
+  const [copiedLinkRef, setCopiedLinkRef] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [contactSearch, setContactSearch] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+
+  // Personalized Links State
+  const [personalizedLinks, setPersonalizedLinks] = useState([]);
+  const [newRecipientName, setNewRecipientName] = useState('');
+  const [newRecipientNote, setNewRecipientNote] = useState('');
+  const [linkCreateSuccess, setLinkCreateSuccess] = useState(null);
+
+  // Question Editor Modal State
+  const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState(null);
 
   // Password change modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -49,27 +77,34 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
   const [telegramConfig, setTelegramConfig] = useState(surveyApi.getTelegramConfig());
   const [telegramSaved, setTelegramSaved] = useState(false);
 
+  // Load personalized links on mount
+  useEffect(() => {
+    setPersonalizedLinks(surveyApi.getPersonalizedLinks());
+  }, []);
+
   const totalParticipants = responses.length;
 
-  // Filter respondents who provided contact info
+  // Filter respondents who provided contact info OR came from personalized link
   const leads = useMemo(() => {
     return responses
-      .filter(r => r.contact && (r.contact.fullName || r.contact.phone))
+      .filter(r => (r.contact && (r.contact.fullName || r.contact.phone)) || r.metadata?.isPersonalized)
       .map(r => ({
         id: r.id,
-        fullName: r.contact.fullName || 'ثبت نشده',
-        phone: r.contact.phone || 'ثبت نشده',
-        savedAt: r.contact.savedAt || r.submittedAt,
+        fullName: r.metadata?.recipientName || r.contact?.fullName || 'ثبت نشده',
+        phone: r.contact?.phone || 'از طریق لینک اختصاصی (بدون دریافت شماره)',
+        isPersonalized: !!r.metadata?.isPersonalized,
+        refId: r.metadata?.refId || null,
+        savedAt: r.contact?.savedAt || r.submittedAt,
         answers: r.answers || {}
       }));
   }, [responses]);
 
-  // Compute analytics for each question
+  // Compute analytics for all active questions
   const analytics = useMemo(() => {
-    return QUESTIONS.map((q) => {
+    return (questions || []).map((q) => {
       if (q.type === 'choice') {
         const optionCounts = {};
-        q.options.forEach(opt => {
+        (q.options || []).forEach(opt => {
           optionCounts[opt] = 0;
         });
 
@@ -92,7 +127,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
           }
         });
 
-        const breakdown = q.options.map(opt => {
+        const breakdown = (q.options || []).map(opt => {
           const count = optionCounts[opt] || 0;
           const percentage = answeredCount > 0 ? Math.round((count / answeredCount) * 100) : 0;
           return {
@@ -116,7 +151,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
             id: r.id,
             text: r.answers?.[q.id] || '',
             date: r.submittedAt,
-            contactName: r.contact?.fullName || null
+            contactName: r.metadata?.recipientName || r.contact?.fullName || null
           }))
           .filter(item => item.text && item.text.trim().length > 0);
 
@@ -127,7 +162,76 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
         };
       }
     });
-  }, [responses]);
+  }, [responses, questions]);
+
+  // Handle Personalized Link Creation
+  const handleCreatePersonalizedLink = (e) => {
+    e.preventDefault();
+    if (!newRecipientName.trim()) {
+      alert('لطفاً نام مخاطب را وارد کنید.');
+      return;
+    }
+
+    const created = surveyApi.createPersonalizedLink(newRecipientName, newRecipientNote);
+    setPersonalizedLinks(surveyApi.getPersonalizedLinks());
+    setNewRecipientName('');
+    setNewRecipientNote('');
+    setLinkCreateSuccess(created);
+    setTimeout(() => setLinkCreateSuccess(null), 5000);
+  };
+
+  const getFullShareUrl = (linkObj) => {
+    const origin = window.location.origin + window.location.pathname;
+    const cleanOrigin = origin.replace(/\/+$/, '');
+    const encodedName = encodeURIComponent(linkObj.recipientName);
+    return `${cleanOrigin}/?name=${encodedName}&ref=${linkObj.id}`;
+  };
+
+  const handleCopyShareLink = (linkObj) => {
+    const fullUrl = getFullShareUrl(linkObj);
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedLinkRef(linkObj.id);
+    setTimeout(() => setCopiedLinkRef(null), 2000);
+  };
+
+  const handleDeletePersonalizedLink = (id) => {
+    if (window.confirm('آیا مطمئن هستید که این لینک اختصاصی حذف شود؟')) {
+      const updated = surveyApi.deletePersonalizedLink(id);
+      setPersonalizedLinks(updated);
+    }
+  };
+
+  // Question Management
+  const handleSaveQuestion = (questionData) => {
+    if (editingQuestion) {
+      // Edit existing
+      const updated = questions.map(q => q.id === editingQuestion.id ? questionData : q);
+      onUpdateQuestions(updated);
+    } else {
+      // Add new
+      const updated = [...questions, questionData];
+      onUpdateQuestions(updated);
+    }
+    setEditingQuestion(null);
+  };
+
+  const handleDeleteQuestion = (questionId) => {
+    if (questions.length <= 1) {
+      alert('نظرسنجی باید حداقل ۱ سوال داشته باشد.');
+      return;
+    }
+    if (window.confirm('آیا از حذف این سوال اطمینان دارید؟')) {
+      const updated = questions.filter(q => q.id !== questionId);
+      onUpdateQuestions(updated);
+    }
+  };
+
+  const handleResetQuestionsToDefault = () => {
+    if (window.confirm('آیا می‌خواهید تمامی سوالات و گزینه‌ها به حالت اولیه کارخانه بازگردانی شوند؟')) {
+      onResetQuestions();
+      alert('سوالات با موفقیت به حالت پیش‌فرض بازگشتند.');
+    }
+  };
 
   const handleDownload = () => {
     surveyApi.downloadJson(responses);
@@ -167,7 +271,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
   };
 
   const handleCopyAllPhones = () => {
-    const phoneList = leads.map(l => l.phone).filter(p => p !== 'ثبت نشده').join('\n');
+    const phoneList = leads.map(l => l.phone).filter(p => !p.includes('لینک اختصاصی') && p !== 'ثبت نشده').join('\n');
     navigator.clipboard.writeText(phoneList);
     setCopiedAllPhones(true);
     setTimeout(() => setCopiedAllPhones(false), 2500);
@@ -223,11 +327,8 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
     }
   };
 
-  // Filter text responses if Q10
-  const q10 = analytics.find(q => q.type === 'text');
-  const filteredFeedbacks = q10?.textEntries.filter(item => 
-    item.text.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  // Filter text responses
+  const textQuestions = analytics.filter(q => q.type === 'text');
 
   // Filter leads
   const filteredLeads = leads.filter(l => 
@@ -248,13 +349,13 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
             <span>بازگشت به فرم نظرسنجی</span>
           </button>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
-            <span>گزارش و تحلیل نظرسنجی</span>
+            <span>مدیریت و تحلیل پیشرفته نظرسنجی</span>
             <span className="text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-bold">
               GLOW LUX
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            آمار تفکیکی پاسخ‌ها، نظرات و اطلاعات تماس محرمانه مخاطبان (رمزگذاری‌شده)
+            آمار پاسخ‌ها، ساخت لینک‌های اختصاصی افراد، ویرایش سوالات و ارسال مستقیم به تلگرام
           </p>
         </div>
 
@@ -271,11 +372,11 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
 
           <button
             onClick={() => setShowTelegramModal(true)}
-            title="تنظیمات دریافت در تلگرام"
+            title="تنظیمات دریافت کامل در تلگرام"
             className="px-3 py-2 rounded-xl bg-white hover:bg-sky-50 text-slate-700 text-xs font-bold border border-slate-200 shadow-sm transition flex items-center gap-1.5"
           >
             <Bell className="w-3.5 h-3.5 text-sky-600" />
-            <span>اطلاع‌رسانی تلگرام</span>
+            <span>ارسال کامل به تلگرام</span>
           </button>
 
           <button
@@ -321,7 +422,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500">کل پاسخ‌دهندگان</span>
@@ -337,36 +438,49 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
 
         <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500">مخاطبان ثبت اطلاعات تماس (لید)</span>
+            <span className="text-xs font-bold text-slate-500">لینک‌های اختصاصی ساخته‌شده</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Link2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-700 font-mono">
+            {personalizedLinks.length}
+            <span className="text-xs font-normal text-slate-500 mr-2">مخاطب VIP</span>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500">مخاطبان ثبت اطلاعات تماس</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
               <Phone className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-amber-700 font-mono">
             {leads.length}
-            <span className="text-xs font-normal text-slate-500 mr-2">شماره تماس</span>
+            <span className="text-xs font-normal text-slate-500 mr-2">لید و شماره</span>
           </div>
         </div>
 
         <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500">نظرات و پیشنهادات متنی</span>
+            <span className="text-xs font-bold text-slate-500">تعداد سوالات فعال</span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4" />
+              <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-800 font-mono">
-            {q10?.answeredCount || 0}
-            <span className="text-xs font-normal text-slate-500 mr-2">دیدگاه</span>
+          <div className="text-2xl sm:text-3xl font-black text-purple-700 font-mono">
+            {questions.length}
+            <span className="text-xs font-normal text-slate-500 mr-2">سوال</span>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-3 border-b border-rose-200/80 mb-6 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-rose-200/80 mb-6 overflow-x-auto">
         <button
           onClick={() => setActiveTab('stats')}
-          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative ${
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold transition whitespace-nowrap relative ${
             activeTab === 'stats' 
               ? 'text-rose-700 border-b-2 border-rose-600' 
               : 'text-slate-500 hover:text-slate-800'
@@ -376,15 +490,45 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
         </button>
 
         <button
+          onClick={() => setActiveTab('links')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
+            activeTab === 'links' 
+              ? 'text-rose-700 border-b-2 border-rose-600' 
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Link2 className="w-4 h-4 text-emerald-600" />
+          <span>سازنده لینک‌های اختصاصی</span>
+          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1">
+            {personalizedLinks.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('questions')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
+            activeTab === 'questions' 
+              ? 'text-rose-700 border-b-2 border-rose-600' 
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Edit3 className="w-4 h-4 text-rose-500" />
+          <span>مدیریت سوالات و جواب‌ها</span>
+          <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1">
+            {questions.length}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('leads')}
-          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
             activeTab === 'leads' 
               ? 'text-rose-700 border-b-2 border-rose-600' 
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Phone className="w-4 h-4" />
-          <span>اطلاعات تماس مخاطبان</span>
+          <Phone className="w-4 h-4 text-amber-500" />
+          <span>اطلاعات تماس و لیدها</span>
           <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1">
             {leads.length}
           </span>
@@ -392,25 +536,27 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
 
         <button
           onClick={() => setActiveTab('rawJson')}
-          className={`pb-3 text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold transition whitespace-nowrap relative flex items-center gap-1.5 ${
             activeTab === 'rawJson' 
               ? 'text-rose-700 border-b-2 border-rose-600' 
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <Code2 className="w-4 h-4" />
-          <span>مشاهده فایل خام JSON</span>
+          <span>مشاهده JSON</span>
         </button>
       </div>
 
+      {/* ========================================================= */}
       {/* TAB 1: Statistical Breakdown */}
+      {/* ========================================================= */}
       {activeTab === 'stats' && (
         <div className="space-y-6">
           {analytics.map((q, idx) => {
             if (q.type === 'choice') {
               return (
                 <div 
-                  key={q.id}
+                  key={q.id || idx}
                   className="glass-panel-luxury rounded-2xl p-5 sm:p-6 shadow-sm border border-rose-100"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-rose-100/80">
@@ -470,10 +616,10 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
               );
             }
 
-            // Text Question (Q10)
+            // Text Question
             return (
               <div 
-                key={q.id}
+                key={q.id || idx}
                 className="glass-panel-luxury rounded-2xl p-5 sm:p-6 shadow-sm border border-purple-100"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-purple-100">
@@ -502,35 +648,35 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
                   </div>
                 )}
 
-                {filteredFeedbacks.length === 0 ? (
+                {q.textEntries.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs sm:text-sm">
-                    {q.textEntries.length === 0 
-                      ? 'هنوز نظر متنی ثبت نشده است.' 
-                      : 'موردی مطابق با جستجوی شما پیدا نشد.'}
+                    هنوز نظر متنی برای این سوال ثبت نشده است.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {filteredFeedbacks.map((item, fIdx) => (
-                      <div 
-                        key={item.id || fIdx} 
-                        className="p-4 rounded-xl bg-white/90 border border-slate-200/90 shadow-sm hover:border-purple-200 transition"
-                      >
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDate(item.date)}
-                          </span>
-                          {item.contactName && (
-                            <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                              {item.contactName}
+                    {q.textEntries
+                      .filter(item => item.text.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map((item, fIdx) => (
+                        <div 
+                          key={item.id || fIdx} 
+                          className="p-4 rounded-xl bg-white/90 border border-slate-200/90 shadow-sm hover:border-purple-200 transition"
+                        >
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(item.date)}
                             </span>
-                          )}
+                            {item.contactName && (
+                              <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                {item.contactName}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
+                            {item.text}
+                          </p>
                         </div>
-                        <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
-                          {item.text}
-                        </p>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 )}
               </div>
@@ -539,7 +685,313 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
         </div>
       )}
 
-      {/* TAB 2: Contact Leads */}
+      {/* ========================================================= */}
+      {/* TAB 2: Personalized VIP Links Generator & Tracker */}
+      {/* ========================================================= */}
+      {activeTab === 'links' && (
+        <div className="space-y-6">
+          {/* Creator Box */}
+          <div className="glass-panel-luxury rounded-3xl p-6 shadow-sm border border-emerald-100 text-right">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Link2 className="w-4 h-4" />
+              </div>
+              <h3 className="font-extrabold text-base text-slate-800">
+                ایجاد لینک اختصاصی برای افراد خاص (VIP)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              با ایجاد لینک اختصاصی، وقتی مخاطب مورد نظر (مثلاً خانم/آقای فلانی) لینک را باز کند، سیستم دقیقاً می‌داند که چه کسی به سوالات پاسخ داده است. در پایان نیز <strong>به هیچ‌وجه از او نام یا شماره تماس گرفته نمی‌شود</strong> و با پیام تشکر اختصاصی همراهی می‌گردد.
+            </p>
+
+            <form onSubmit={handleCreatePersonalizedLink} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  نام و نام خانوادگی مخاطب:
+                </label>
+                <input
+                  type="text"
+                  value={newRecipientName}
+                  onChange={(e) => setNewRecipientName(e.target.value)}
+                  placeholder="مثال: خانم سمیرا محمدی"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-200 focus:border-emerald-400 outline-none"
+                  required
+                />
+              </div>
+
+              <div className="sm:col-span-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  توضیح یا یادداشت (اختیاری):
+                </label>
+                <input
+                  type="text"
+                  value={newRecipientNote}
+                  onChange={(e) => setNewRecipientNote(e.target.value)}
+                  placeholder="مثال: مشتری قدیمی تلگرام / مشاور VIP"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-200 focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-1 flex items-end">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ساخت لینک اختصاصی</span>
+                </button>
+              </div>
+            </form>
+
+            {linkCreateSuccess && (
+              <div className="mt-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>
+                    لینک اختصاصی برای <strong>{linkCreateSuccess.recipientName}</strong> با موفقیت ساخته شد!
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleCopyShareLink(linkCreateSuccess)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>کپی لینک اختصاصی</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Links List */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-extrabold text-slate-800 flex items-center justify-between">
+              <span>فهرست لینک‌های اختصاصی فعال ({personalizedLinks.length}):</span>
+            </h4>
+
+            {personalizedLinks.length === 0 ? (
+              <div className="glass-panel rounded-2xl p-12 text-center text-slate-400 text-xs sm:text-sm border border-slate-200">
+                هنوز هیچ لینک اختصاصی ایجاد نکرده‌اید. با وارد کردن نام در کادر بالا، اولین لینک اختصاصی را بسازید.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {personalizedLinks.map((link) => {
+                  const shareUrl = getFullShareUrl(link);
+                  const isCopied = copiedLinkRef === link.id;
+
+                  // Check if this link has an associated answer in responses
+                  const matchedResponse = responses.find(r => r.metadata?.refId === link.id);
+                  const isAnswered = link.isAnswered || !!matchedResponse;
+
+                  return (
+                    <div 
+                      key={link.id}
+                      className="glass-panel-luxury rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 hover:border-emerald-200 transition text-right"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                            <UserCheck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-slate-800">
+                              {link.recipientName}
+                            </h4>
+                            <span className="text-[10px] text-slate-400">
+                              ایجاد شده در: {formatDate(link.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        {isAnswered ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>پاسخ داد</span>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-500" />
+                            <span>در انتظار پاسخ</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {link.note && (
+                        <p className="text-xs text-slate-500 mb-3 bg-white/60 p-2 rounded-xl border border-slate-100">
+                          📝 {link.note}
+                        </p>
+                      )}
+
+                      {/* URL Box and Copy */}
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 mb-3">
+                        <input
+                          type="text"
+                          readOnly
+                          value={shareUrl}
+                          className="text-[11px] text-slate-600 bg-transparent outline-none w-full font-mono truncate"
+                          dir="ltr"
+                        />
+                        <button
+                          onClick={() => handleCopyShareLink(link)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 flex-shrink-0 ${
+                            isCopied 
+                              ? 'bg-emerald-600 text-white' 
+                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          <span>{isCopied ? 'کپی شد' : 'کپی'}</span>
+                        </button>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`سلام ${link.recipientName} عزیز، نظرسنجی اختصاصی شما آماده است:`)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sky-600 hover:text-sky-800 text-[11px] font-bold flex items-center gap-1"
+                          >
+                            <Share2 className="w-3 h-3" />
+                            <span>ارسال در تلگرام</span>
+                          </a>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeletePersonalizedLink(link.id)}
+                          className="text-red-500 hover:text-red-700 text-[11px] font-semibold flex items-center gap-0.5"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>حذف</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 3: Dynamic Question & Answer Editor */}
+      {/* ========================================================= */}
+      {activeTab === 'questions' && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/80 p-4 rounded-2xl border border-rose-100 shadow-sm">
+            <div>
+              <h3 className="font-extrabold text-sm sm:text-base text-slate-800">
+                مدیریت زنده سوالات و گزینه‌ها
+              </h3>
+              <p className="text-xs text-slate-500">
+                می‌توانید صورت هر سوال را تغییر دهید، گزینه‌ها را کم یا زیاد کنید یا سوال جدید اضافه فرمایید.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => {
+                  setEditingQuestion(null);
+                  setIsQuestionModalOpen(true);
+                }}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#e54576] to-[#b76e79] text-white text-xs font-bold shadow-sm hover:shadow transition flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>افزودن سوال جدید</span>
+              </button>
+
+              <button
+                onClick={handleResetQuestionsToDefault}
+                className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition flex items-center gap-1.5"
+                title="بازگشت به ۱۰ سوال اولیه پیش‌فرض"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">بازنشانی پیش‌فرض</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Questions Cards List */}
+          <div className="space-y-4">
+            {questions.map((q, idx) => (
+              <div 
+                key={q.id || idx}
+                className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-slate-200 hover:border-rose-200 transition text-right"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-rose-100 text-rose-800 font-bold font-mono text-xs flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                      {q.section}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      {q.type === 'choice' ? 'چندگزینه‌ای' : 'تشریحی (تایپی)'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setEditingQuestion(q);
+                        setIsQuestionModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-slate-700 text-xs font-bold border border-slate-200 transition flex items-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>ویرایش</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteQuestion(q.id)}
+                      disabled={questions.length <= 1}
+                      className="p-1.5 rounded-xl bg-white hover:bg-red-50 text-red-600 border border-slate-200 transition disabled:opacity-30"
+                      title="حذف سوال"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-sm font-extrabold text-slate-800 mb-3">
+                  {q.question}
+                </h4>
+
+                {/* Options display */}
+                {q.type === 'choice' && Array.isArray(q.options) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {q.options.map((opt, optIdx) => (
+                      <div 
+                        key={optIdx}
+                        className="px-3 py-2 rounded-xl bg-white/70 border border-slate-200 text-xs text-slate-700 flex items-center gap-2"
+                      >
+                        <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold flex items-center justify-center font-mono">
+                          {optIdx + 1}
+                        </span>
+                        <span className="font-medium">{opt}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {q.type === 'text' && (
+                  <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 text-xs text-purple-800">
+                    ✍️ کادر ورودی متن باز (مخاطب متن دلخواه خود را تایپ می‌کند)
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: Contact Leads & VIP Responses */}
+      {/* ========================================================= */}
       {activeTab === 'leads' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/80 p-4 rounded-2xl border border-rose-100 shadow-sm">
@@ -577,7 +1029,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
           {filteredLeads.length === 0 ? (
             <div className="glass-panel rounded-2xl p-12 text-center text-slate-400 text-sm border border-slate-200">
               {leads.length === 0 
-                ? 'هنوز هیچ مخاطبی اطلاعات تماس خود را ثبت نکرده است.' 
+                ? 'هنوز هیچ مخاطبی اطلاعات تماس یا پاسخ ثبت نکرده است.' 
                 : 'موردی مطابق با جستجوی شما یافت نشد.'}
             </div>
           ) : (
@@ -585,17 +1037,30 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
               {filteredLeads.map((lead, idx) => (
                 <div 
                   key={lead.id || idx}
-                  className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-rose-100 hover:border-rose-300 transition"
+                  className={`glass-panel-luxury rounded-2xl p-5 shadow-sm border transition ${
+                    lead.isPersonalized ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-rose-100'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-100 to-amber-100 flex items-center justify-center text-rose-700 font-bold text-sm">
-                        <User className="w-4 h-4" />
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm ${
+                        lead.isPersonalized 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : 'bg-rose-100 text-rose-700'
+                      }`}>
+                        {lead.isPersonalized ? <UserCheck className="w-4 h-4" /> : <User className="w-4 h-4" />}
                       </div>
                       <div>
-                        <h4 className="text-sm font-extrabold text-slate-800">
-                          {lead.fullName}
-                        </h4>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-sm font-extrabold text-slate-800">
+                            {lead.fullName}
+                          </h4>
+                          {lead.isPersonalized && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                              💎 مخاطب اختصاصی
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {formatDate(lead.savedAt)}
@@ -608,41 +1073,45 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
                     </span>
                   </div>
 
+                  {/* Phone action box */}
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-1.5 text-xs sm:text-sm font-mono font-bold text-slate-800" dir="ltr">
                       <Phone className="w-3.5 h-3.5 text-rose-600" />
                       <span>{lead.phone}</span>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleCopyPhone(lead.phone, idx)}
-                        className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-600 flex items-center gap-1 transition"
-                      >
-                        {copiedPhoneIdx === idx ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span className="text-emerald-700">کپی شد</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>کپی</span>
-                          </>
-                        )}
-                      </button>
+                    {!lead.isPersonalized && lead.phone !== 'ثبت نشده' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleCopyPhone(lead.phone, idx)}
+                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-600 flex items-center gap-1 transition"
+                        >
+                          {copiedPhoneIdx === idx ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700">کپی شد</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>کپی</span>
+                            </>
+                          )}
+                        </button>
 
-                      <a
-                        href={`tel:${lead.phone}`}
-                        className="p-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition"
-                        title="تماس مستقیم"
-                      >
-                        <PhoneCall className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
+                        <a
+                          href={`tel:${lead.phone}`}
+                          className="p-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition"
+                          title="تماس مستقیم"
+                        >
+                          <PhoneCall className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="text-[11px] text-slate-600 space-y-1 bg-white/70 p-2.5 rounded-xl border border-rose-50">
+                  {/* Highlights from survey */}
+                  <div className="text-[11px] text-slate-600 space-y-1 bg-white/70 p-2.5 rounded-xl border border-rose-50 text-right">
                     <p className="font-bold text-[10px] text-slate-400">گزیده‌ای از پاسخ‌های ثبت‌شده:</p>
                     {lead.answers.q1 && (
                       <p className="truncate">▫️ <strong>دغدغه اندام:</strong> {lead.answers.q1}</p>
@@ -661,7 +1130,9 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
         </div>
       )}
 
-      {/* TAB 3: Raw JSON View */}
+      {/* ========================================================= */}
+      {/* TAB 5: Raw JSON View */}
+      {/* ========================================================= */}
       {activeTab === 'rawJson' && (
         <div className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-3">
@@ -692,6 +1163,17 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
         </div>
       )}
 
+      {/* Question Editor Modal */}
+      <QuestionEditorModal
+        isOpen={isQuestionModalOpen}
+        onClose={() => {
+          setIsQuestionModalOpen(false);
+          setEditingQuestion(null);
+        }}
+        onSave={handleSaveQuestion}
+        initialQuestion={editingQuestion}
+      />
+
       {/* Modal: Change Password */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -708,7 +1190,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
               <h3 className="font-extrabold text-base text-slate-800">تغییر رمز عبور مدیریت</h3>
             </div>
             <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-              رمز جدید را وارد کنید. این رمز عبور در مرورگر شما رمزنگاری و ذخیره می‌شود.
+              رمز جدید را وارد کنید. این رمز عبور در مرورگر شما به صورت امن ذخیره می‌شود.
             </p>
 
             <form onSubmit={handleChangePasswordSubmit} className="space-y-3.5 text-right">
@@ -758,7 +1240,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
       {/* Modal: Telegram Notifications */}
       {showTelegramModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-scale-up border border-rose-100">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-scale-up border border-rose-100 text-right">
             <button
               onClick={() => setShowTelegramModal(false)}
               className="absolute left-4 top-4 text-slate-400 hover:text-slate-600 transition"
@@ -768,13 +1250,13 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
 
             <div className="flex items-center gap-2 mb-3">
               <Bell className="w-5 h-5 text-sky-600" />
-              <h3 className="font-extrabold text-base text-slate-800">دریافت فوری پاسخ‌ها در تلگرام</h3>
+              <h3 className="font-extrabold text-base text-slate-800">ارسال کامل تمام پاسخ‌ها به تلگرام</h3>
             </div>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              با تنظیم توکن ربات تلگرام و Chat ID خود، به محض ثبت پاسخ یا شماره تماس جدید توسط مخاطبان، یک پیام خصوصی فوری در تلگرام دریافت می‌کنید. اطلاعات کاملاً محرمانه مانده و در گیت‌هاب عمومی ذخیره نمی‌شود.
+              با تنظیم ربات تلگرام، به محض ثبت پاسخ، <strong>تمام سوالات و جواب‌های تک‌تک بخش‌ها به همراه مشخصات فرد یا لینک اختصاصی</strong> مستقیماً به تلگرام شخصی شما فوروارد می‌شود.
             </p>
 
-            <form onSubmit={handleSaveTelegram} className="space-y-3.5 text-right">
+            <form onSubmit={handleSaveTelegram} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Telegram Bot Token:</label>
                 <input
@@ -788,7 +1270,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, o
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Telegram Chat ID (شناسه عددی شما):</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Telegram Chat ID (شناسه چت یا اکانت شما):</label>
                 <input
                   type="text"
                   value={telegramConfig.chatId}

@@ -52,7 +52,7 @@ app.get('/api/responses', (req, res) => {
 // POST a new response
 app.post('/api/responses', (req, res) => {
   try {
-    const { answers, contact } = req.body;
+    const { answers, contact, metadata } = req.body;
     if (!answers || typeof answers !== 'object') {
       return res.status(400).json({ success: false, message: 'Invalid payload: answers object required.' });
     }
@@ -62,7 +62,8 @@ app.post('/api/responses', (req, res) => {
       id: 'resp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       submittedAt: new Date().toISOString(),
       answers,
-      contact: contact || null
+      contact: contact || null,
+      metadata: metadata || null
     };
 
     responses.push(newEntry);
