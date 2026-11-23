@@ -1,13 +1,16 @@
 import React from 'react';
-import { Sparkles, Clock, ShieldCheck, ArrowLeft, UserCheck, Phone, Send, Heart } from 'lucide-react';
+import { Sparkles, Clock, ShieldCheck, ArrowLeft, UserCheck, Phone, Send, Heart, MessageSquare } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
 export default function WelcomeView({ onStart, personalizedUser }) {
-  const topics = [
-    { title: "لک، تیرگی و مشکلات پوستی", icon: "🌸" },
-    { title: "ریزش، شوره و سلامت مو", icon: "💆‍♀️" },
-    { title: "آبرسانی و جوانسازی روزانه", icon: "✨" },
-    { title: "پاسخ به سوالات و نیازهای شما", icon: "💬" },
+  const sections = [
+    { title: "تناسب اندام", icon: "🌿" },
+    { title: "دهان و دندان", icon: "✨" },
+    { title: "عضلات و مفاصل", icon: "🧘‍♀️" },
+    { title: "پوست صورت", icon: "🌸" },
+    { title: "سلامت مو", icon: "💆‍♀️" },
+    { title: "پوست بدن", icon: "🧴" },
+    { title: "انگیزه و رشد", icon: "💎" },
   ];
 
   return (
@@ -29,7 +32,7 @@ export default function WelcomeView({ onStart, personalizedUser }) {
                 دعوت‌نامه اختصاصی GLOW LUX
               </p>
               <h2 className="text-sm sm:text-base font-extrabold text-slate-800">
-                سلام {personalizedUser.name} عزیز، به نظرسنجی اختصاصی خوش آمدید 🌸
+                سلام {personalizedUser.name} عزیز، به نظرسنجی جامع خوش آمدید 🌸
               </h2>
             </div>
           </div>
@@ -97,9 +100,9 @@ export default function WelcomeView({ onStart, personalizedUser }) {
 
         {/* Survey Topics Covered */}
         <div className="mb-6 pt-4 border-t border-rose-100/70">
-          <p className="text-xs font-bold text-slate-500 mb-3">موضوعات مورد بررسی در این نظرسنجی:</p>
+          <p className="text-xs font-bold text-slate-500 mb-3">محورهای مورد بررسی در این نظرسنجی:</p>
           <div className="flex flex-wrap justify-center gap-2">
-            {topics.map((sec, idx) => (
+            {sections.map((sec, idx) => (
               <span
                 key={idx}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-rose-50/90 text-rose-800 border border-rose-200/60"
@@ -126,7 +129,7 @@ export default function WelcomeView({ onStart, personalizedUser }) {
         <div className="pt-4 border-t border-rose-100/70 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500">
           <span className="font-semibold text-slate-600 flex items-center gap-1">
             <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-            <span>راهنمایی و مشاوره مستقیم:</span>
+            <span>مشاوره و پشتیبانی:</span>
           </span>
           <a 
             href={`tel:${SURVEY_INFO.contactPhone}`} 
@@ -136,13 +139,13 @@ export default function WelcomeView({ onStart, personalizedUser }) {
             <span>{SURVEY_INFO.contactPhoneDisplay}</span>
           </a>
           <a 
-            href={SURVEY_INFO.contactIdLink} 
+            href={SURVEY_INFO.rubikaLink} 
             target="_blank" 
             rel="noreferrer"
             className="flex items-center gap-1 font-mono font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 hover:bg-purple-100 transition"
-            title="ارتباط در روبیکا"
           >
-            <span>روبیکا: {SURVEY_INFO.contactId}</span>
+            <MessageSquare className="w-3 h-3" />
+            <span>روبیکا: {SURVEY_INFO.rubikaId}</span>
           </a>
         </div>
       </div>
