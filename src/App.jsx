@@ -245,9 +245,9 @@ export default function App() {
               href={SURVEY_INFO.contactIdLink}
               target="_blank"
               rel="noreferrer"
-              className="text-sky-600 hover:text-sky-800 font-mono font-bold transition"
+              className="text-purple-600 hover:text-purple-800 font-mono font-bold transition"
             >
-              💬 {SURVEY_INFO.contactId}
+              💬 روبیکا: {SURVEY_INFO.contactId}
             </a>
           </div>
 

@@ -139,10 +139,10 @@ export default function WelcomeView({ onStart, personalizedUser }) {
             href={SURVEY_INFO.contactIdLink} 
             target="_blank" 
             rel="noreferrer"
-            className="flex items-center gap-1 font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-200 hover:bg-sky-100 transition"
+            className="flex items-center gap-1 font-mono font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 hover:bg-purple-100 transition"
+            title="ارتباط در روبیکا"
           >
-            <Send className="w-3 h-3" />
-            <span>{SURVEY_INFO.contactId}</span>
+            <span>روبیکا: {SURVEY_INFO.contactId}</span>
           </a>
         </div>
       </div>

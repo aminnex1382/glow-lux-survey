@@ -7,7 +7,8 @@ export const SURVEY_INFO = {
   contactPhone: "09370776973",
   contactPhoneDisplay: "۰۹۳۷۰۷۷۶۹۷۳",
   contactId: "@Zieba_Nafis",
-  contactIdLink: "https://t.me/Zieba_Nafis",
+  contactPlatform: "روبیکا",
+  contactIdLink: "https://rubika.ir/Zieba_Nafis",
   supportMessage: "ما اینجا هستیم تا به دغدغه‌های واقعی شما پاسخ بدیم. اگر برای شناخت نیازهای پوست و مو یا انتخاب محصولات مراقبتی مناسب به راهنمایی نیاز دارید، می‌تونید با ما در ارتباط باشید.",
   estimatedTime: "کمتر از ۲ دقیقه",
   privacyNotice: "این نظرسنجی کاملاً بی‌نام بوده و نیازی به وارد کردن هیچ‌گونه اطلاعات فردی نیست."

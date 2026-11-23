@@ -239,26 +239,26 @@ export default function CompletionView({
               </span>
             </a>
 
-            {/* Telegram ID button */}
+            {/* Rubika ID button */}
             <a
               href={SURVEY_INFO.contactIdLink}
               target="_blank"
               rel="noreferrer"
-              className="p-3 rounded-xl bg-white border border-sky-200 shadow-sm flex items-center justify-between gap-2 hover:bg-sky-50 transition group"
+              className="p-3 rounded-xl bg-white border border-purple-200 shadow-sm flex items-center justify-between gap-2 hover:bg-purple-50 transition group"
             >
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center">
-                  <Send className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                  <MessageCircle className="w-4 h-4" />
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-slate-400">آیدی ارتباطی در تلگرام:</p>
-                  <p className="text-xs font-bold text-sky-700 font-mono" dir="ltr">
+                  <p className="text-[10px] text-slate-400">آیدی ارتباطی در روبیکا:</p>
+                  <p className="text-xs font-bold text-purple-700 font-mono" dir="ltr">
                     {SURVEY_INFO.contactId}
                   </p>
                 </div>
               </div>
-              <span className="text-[11px] font-bold text-sky-600 group-hover:scale-105 transition-transform">
-                پیام
+              <span className="text-[11px] font-bold text-purple-600 group-hover:scale-105 transition-transform">
+                ارتباط در روبیکا
               </span>
             </a>
           </div>
