@@ -233,9 +233,22 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-slate-400">
-            <span>طراحی شده با عشق و ظرافت برای جامعه زیبایی و سلامتی</span>
-            <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 inline" />
+          <div className="flex items-center gap-3 text-[11px]">
+            <a 
+              href={`tel:${SURVEY_INFO.contactPhone}`}
+              className="text-slate-600 hover:text-rose-600 font-mono font-bold transition"
+            >
+              📞 {SURVEY_INFO.contactPhoneDisplay}
+            </a>
+            <span className="text-slate-300">|</span>
+            <a 
+              href={SURVEY_INFO.contactIdLink}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sky-600 hover:text-sky-800 font-mono font-bold transition"
+            >
+              💬 {SURVEY_INFO.contactId}
+            </a>
           </div>
 
           <div className="text-[11px] text-slate-400">

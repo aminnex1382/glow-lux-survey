@@ -9,7 +9,10 @@ import {
   Send, 
   Gift, 
   Check,
-  UserCheck
+  UserCheck,
+  Heart,
+  PhoneCall,
+  MessageCircle
 } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
@@ -119,7 +122,7 @@ export default function CompletionView({
             </p>
 
             {/* Optional Contact Information Form - ONLY for non-personalized general visitors */}
-            <div className="bg-white/80 rounded-2xl p-5 border border-rose-200/80 shadow-sm text-right transition-all">
+            <div className="bg-white/80 rounded-2xl p-5 border border-rose-200/80 shadow-sm text-right transition-all mb-6">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Gift className="w-4 h-4 text-rose-600" />
@@ -201,6 +204,71 @@ export default function CompletionView({
             </div>
           </div>
         )}
+
+        {/* Official Channel Contact & Support Box */}
+        <div className="bg-gradient-to-br from-rose-50/90 via-pink-50/80 to-amber-50/90 rounded-2xl p-5 border border-rose-200/90 shadow-sm text-right">
+          <div className="flex items-center gap-2 mb-2">
+            <Heart className="w-4 h-4 text-rose-600 fill-rose-600" />
+            <h3 className="text-xs sm:text-sm font-extrabold text-slate-800">
+              ما اینجا هستیم تا به دغدغه‌های واقعی شما پاسخ بدیم 💗
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-600 leading-relaxed mb-4 font-normal">
+            اگر برای شناخت نیازهای پوست و مو یا انتخاب محصولات مراقبتی مناسب به راهنمایی نیاز دارید، می‌تونید با ما در ارتباط باشید:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Phone button */}
+            <a
+              href={`tel:${SURVEY_INFO.contactPhone}`}
+              className="p-3 rounded-xl bg-white border border-rose-200 shadow-sm flex items-center justify-between gap-2 hover:bg-rose-50 transition group"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                  <PhoneCall className="w-4 h-4" />
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400">تماس مستقیم:</p>
+                  <p className="text-xs font-bold text-slate-800 font-mono" dir="ltr">
+                    {SURVEY_INFO.contactPhoneDisplay}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold text-rose-600 group-hover:scale-105 transition-transform">
+                تماس
+              </span>
+            </a>
+
+            {/* Telegram ID button */}
+            <a
+              href={SURVEY_INFO.contactIdLink}
+              target="_blank"
+              rel="noreferrer"
+              className="p-3 rounded-xl bg-white border border-sky-200 shadow-sm flex items-center justify-between gap-2 hover:bg-sky-50 transition group"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400">آیدی ارتباطی در تلگرام:</p>
+                  <p className="text-xs font-bold text-sky-700 font-mono" dir="ltr">
+                    {SURVEY_INFO.contactId}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold text-sky-600 group-hover:scale-105 transition-transform">
+                پیام
+              </span>
+            </a>
+          </div>
+
+          <div className="mt-3 text-center border-t border-rose-200/50 pt-2.5">
+            <span className="text-[10px] font-bold text-slate-500">
+              {SURVEY_INFO.brandName} | {SURVEY_INFO.channelName}
+            </span>
+          </div>
+        </div>
 
         <div className="mt-6 flex justify-center">
           <button

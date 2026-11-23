@@ -1,15 +1,13 @@
 import React from 'react';
-import { Sparkles, Clock, ShieldCheck, ArrowLeft, UserCheck } from 'lucide-react';
+import { Sparkles, Clock, ShieldCheck, ArrowLeft, UserCheck, Phone, Send, Heart } from 'lucide-react';
 import { SURVEY_INFO } from '../data/questions';
 
 export default function WelcomeView({ onStart, personalizedUser }) {
-  const sections = [
-    { title: "سلامت و تناسب اندام", icon: "🌿" },
-    { title: "سلامت دهان و دندان", icon: "✨" },
-    { title: "دردهای عضلانی و مفصلی", icon: "🧘‍♀️" },
-    { title: "سلامت و زیبایی مو", icon: "💆‍♀️" },
-    { title: "مراقبت از پوست بدن", icon: "🌸" },
-    { title: "انگیزه، هدف و درآمد", icon: "💎" },
+  const topics = [
+    { title: "لک، تیرگی و مشکلات پوستی", icon: "🌸" },
+    { title: "ریزش، شوره و سلامت مو", icon: "💆‍♀️" },
+    { title: "آبرسانی و جوانسازی روزانه", icon: "✨" },
+    { title: "پاسخ به سوالات و نیازهای شما", icon: "💬" },
   ];
 
   return (
@@ -38,7 +36,7 @@ export default function WelcomeView({ onStart, personalizedUser }) {
         )}
 
         {/* Brand Emblem */}
-        <div className="inline-flex items-center justify-center mb-5 relative">
+        <div className="inline-flex items-center justify-center mb-4 relative">
           <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-[#b76e79] via-[#e54576] to-[#fbcfe8] p-1 shadow-lg shadow-rose-200 animate-pulse-subtle">
             <div className="w-full h-full bg-white rounded-full flex flex-col items-center justify-center p-2 text-center">
               <Sparkles className="w-7 h-7 sm:w-9 sm:h-9 text-[#e54576] mb-0.5" />
@@ -48,29 +46,30 @@ export default function WelcomeView({ onStart, personalizedUser }) {
         </div>
 
         {/* Main Titles */}
+        <div className="inline-block px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold mb-3">
+          {SURVEY_INFO.title}
+        </div>
+
         <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight mb-2">
           {SURVEY_INFO.channelName}
         </h1>
         <p className="text-xs sm:text-sm font-semibold text-rose-600 mb-4 tracking-wide">
-          تخصصی‌ترین نظرسنجی و نیازسنجی جامعه زیبایی و سلامت
+          {SURVEY_INFO.subtitle}
         </p>
 
         {/* Welcome Message */}
-        <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg mx-auto mb-8 font-normal">
+        <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg mx-auto mb-6 font-normal">
           {personalizedUser?.name ? (
             <>
               {personalizedUser.name} گرامی، دیدگاه‌ها و نیازهای شما برای ما اولویت ویژه دارد. پاسخ‌های شما مستقیماً توسط تیم تخصصی کانال بررسی خواهد شد.
             </>
           ) : (
-            <>
-              سلام به شما همراه عزیز و ارزشمند کانال 🌸
-              دیدگاه‌های شما راهنمای اصلی ما در انتخاب برترین موضوعات آموزشی علمی و معرفی باکیفیت‌ترین محصولات بهداشتی و مراقبتی است.
-            </>
+            SURVEY_INFO.description
           )}
         </p>
 
         {/* Feature Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto mb-8 text-right">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto mb-6 text-right">
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/70 border border-rose-100/90 shadow-sm">
             <div className="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 flex-shrink-0">
               <Clock className="w-4 h-4" />
@@ -97,10 +96,10 @@ export default function WelcomeView({ onStart, personalizedUser }) {
         </div>
 
         {/* Survey Topics Covered */}
-        <div className="mb-8 pt-4 border-t border-rose-100/70">
+        <div className="mb-6 pt-4 border-t border-rose-100/70">
           <p className="text-xs font-bold text-slate-500 mb-3">موضوعات مورد بررسی در این نظرسنجی:</p>
           <div className="flex flex-wrap justify-center gap-2">
-            {sections.map((sec, idx) => (
+            {topics.map((sec, idx) => (
               <span
                 key={idx}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-rose-50/90 text-rose-800 border border-rose-200/60"
@@ -113,7 +112,7 @@ export default function WelcomeView({ onStart, personalizedUser }) {
         </div>
 
         {/* Primary CTA Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center mb-6">
           <button
             onClick={onStart}
             className="w-full sm:w-auto min-w-[240px] px-8 py-4 rounded-2xl bg-gradient-to-r from-[#e54576] to-[#b76e79] hover:from-[#d1295d] hover:to-[#9f5762] text-white font-bold text-base shadow-glow-soft hover:shadow-glow-hover active:scale-[0.98] transition-all flex items-center justify-center gap-2 group"
@@ -121,6 +120,30 @@ export default function WelcomeView({ onStart, personalizedUser }) {
             <span>شروع نظرسنجی</span>
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           </button>
+        </div>
+
+        {/* Direct Contact Bar */}
+        <div className="pt-4 border-t border-rose-100/70 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500">
+          <span className="font-semibold text-slate-600 flex items-center gap-1">
+            <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+            <span>راهنمایی و مشاوره مستقیم:</span>
+          </span>
+          <a 
+            href={`tel:${SURVEY_INFO.contactPhone}`} 
+            className="flex items-center gap-1 font-mono font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 hover:bg-rose-100 transition"
+          >
+            <Phone className="w-3 h-3" />
+            <span>{SURVEY_INFO.contactPhoneDisplay}</span>
+          </a>
+          <a 
+            href={SURVEY_INFO.contactIdLink} 
+            target="_blank" 
+            rel="noreferrer"
+            className="flex items-center gap-1 font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-200 hover:bg-sky-100 transition"
+          >
+            <Send className="w-3 h-3" />
+            <span>{SURVEY_INFO.contactId}</span>
+          </a>
         </div>
       </div>
     </div>
