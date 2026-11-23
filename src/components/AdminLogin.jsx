@@ -98,7 +98,7 @@ export default function AdminLogin({ onLoginSuccess, onBackToSurvey }) {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-rose-100 flex items-center justify-between text-xs">
+        <div className="mt-6 pt-4 border-t border-rose-100 flex items-center justify-center text-xs">
           <button
             onClick={onBackToSurvey}
             className="text-slate-500 hover:text-rose-600 font-semibold flex items-center gap-1 transition"
@@ -106,10 +106,6 @@ export default function AdminLogin({ onLoginSuccess, onBackToSurvey }) {
             <ArrowRight className="w-3.5 h-3.5" />
             <span>بازگشت به سایت اصلی</span>
           </button>
-
-          <span className="text-[11px] text-slate-400">
-            رمز پیش‌فرض: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono">glowlux2026</code>
-          </span>
         </div>
       </div>
     </div>

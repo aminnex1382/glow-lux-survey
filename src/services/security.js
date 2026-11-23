@@ -3,9 +3,9 @@
 const AUTH_STORAGE_KEY = 'glow_lux_admin_auth_session';
 const PASS_HASH_KEY = 'glow_lux_admin_pass_hash';
 
-// Default initial password: glowlux2026
-// SHA-256 hash of "glowlux2026"
-const DEFAULT_PASS_HASH = 'f05cb6723b86e3cea55f087d91610bef830b3553925b37c99c937edfed506d8b';
+// Default initial password: Amin1382
+// SHA-256 hash of "Amin1382"
+const DEFAULT_PASS_HASH = '5cf7cf09b68be4411fe94db770e19d9984265519b9782958b529ca7adff49957';
 
 // Helper to compute SHA-256 hash of a string
 export async function sha256(text) {
