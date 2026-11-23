@@ -1,73 +1,15 @@
-// Initial fallback responses if offline or running as static build
-const INITIAL_FALLBACK_DATA = [
-  {
-    "id": "sample-1",
-    "submittedAt": "2026-11-22T14:30:00.000Z",
-    "answers": {
-      "q1": "چربی شکم و پهلو",
-      "q2": "تغذیه سالم",
-      "q3": "زردی و تغییر رنگ دندان",
-      "q4": "کمردرد",
-      "q5": "ریزش مو",
-      "q6": "خشکی و زبری پوست",
-      "q7": "رسیدن به استقلال مالی",
-      "q8": "خیلی زیاد، دنبالش هستم",
-      "q9": "همه موارد",
-      "q10": "کانال بسیار عالی و با کلاسی دارید. لطفاً بیشتر در مورد مکمل‌های کلاژن و روتین پوستی روز و شب توضیح بدید."
-    },
-    "contact": {
-      "fullName": "مریم رضایی",
-      "phone": "09123456789",
-      "savedAt": "2026-11-22T14:32:00.000Z"
-    }
-  },
-  {
-    "id": "sample-2",
-    "submittedAt": "2026-11-22T18:15:00.000Z",
-    "answers": {
-      "q1": "تناسب اندام و حفظ وزن",
-      "q2": "سبک زندگی سالم",
-      "q3": "بیشتر به پیشگیری و مراقبت علاقه دارم",
-      "q4": "گردندرد و گرفتگی عضلات",
-      "q5": "نازکی و کم‌پشتی",
-      "q6": "لک و ناهمواری پوست",
-      "q7": "رشد فردی و پیشرفت",
-      "q8": "دوست داری بیشتر بدونم",
-      "q9": "یادگیری مهارت‌های جدید",
-      "q10": "معرفی محصولات گیاهی و بدون عوارض رو در اولویت قرار بدید ممنون از زحماتتون."
-    },
-    "contact": {
-      "fullName": "سارا محمدی",
-      "phone": "09351234567",
-      "savedAt": "2026-11-22T18:17:00.000Z"
-    }
-  },
-  {
-    "id": "sample-3",
-    "submittedAt": "2026-11-22T21:05:00.000Z",
-    "answers": {
-      "q1": "اضافه وزن و چاقی",
-      "q2": "کنترل وزن",
-      "q3": "پوسیدگی و مشکلات لثه",
-      "q4": "زانودرد و پادرد",
-      "q5": "خشکی و شکنندگی",
-      "q6": "تیرگی آرنج، زانو و نواحی بدن",
-      "q7": "نیاز به درآمد بیشتر",
-      "q8": "خیلی زیاد، دنبالش هستم",
-      "q9": "درآمد و استقلال مالی",
-      "q10": "اگر امکانش هست برای تیرگی نواحی بدن کرم‌های تست شده و تضمینی معرفی کنید."
-    },
-    "contact": null
-  }
-];
+// API and Data Persistence Service (Secure & Sanitized)
 
-const STORAGE_KEY = 'glow_lux_survey_responses_v2';
+// Empty initial fallback data to prevent leaking any mock or real contacts in public repository
+const INITIAL_FALLBACK_DATA = [];
+
+const STORAGE_KEY = 'glow_lux_survey_vault_v3';
+const TELEGRAM_CONFIG_KEY = 'glow_lux_telegram_config';
 
 function getLocalData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_FALLBACK_DATA));
       return INITIAL_FALLBACK_DATA;
     }
     return JSON.parse(raw);
@@ -84,6 +26,39 @@ function saveLocalData(data) {
   }
 }
 
+// Optional: Send private notification directly to Telegram if configured by admin
+async function dispatchTelegramNotification(answers, contact) {
+  try {
+    const rawConfig = localStorage.getItem(TELEGRAM_CONFIG_KEY);
+    if (!rawConfig) return;
+    const config = JSON.parse(rawConfig);
+    if (!config.botToken || !config.chatId) return;
+
+    let text = `🌸 <b>پاسخ جدید در نظرسنجی GLOW LUX</b>\n\n`;
+    if (contact && (contact.fullName || contact.phone)) {
+      text += `👤 <b>نام:</b> ${contact.fullName || 'ثبت نشده'}\n`;
+      text += `📞 <b>شماره تماس:</b> ${contact.phone || 'ثبت نشده'}\n\n`;
+    }
+    text += `📋 <b>پاسخ‌های کلیدی:</b>\n`;
+    if (answers.q1) text += `▫️ دغدغه اندام: ${answers.q1}\n`;
+    if (answers.q5) text += `▫️ دغدغه مو: ${answers.q5}\n`;
+    if (answers.q6) text += `▫️ دغدغه پوست: ${answers.q6}\n`;
+    if (answers.q10) text += `\n💬 <b>نظر متنی:</b>\n${answers.q10}\n`;
+
+    await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: config.chatId,
+        text: text,
+        parse_mode: 'HTML'
+      })
+    });
+  } catch (err) {
+    console.warn('Telegram notification skipped/failed:', err);
+  }
+}
+
 export const surveyApi = {
   // Fetch all responses (tries API first, falls back to localStorage)
   async fetchResponses() {
@@ -97,7 +72,7 @@ export const surveyApi = {
         }
       }
     } catch (err) {
-      console.warn('API server not reachable, using local storage.');
+      // Running on static GitHub Pages or server offline
     }
     return { data: getLocalData(), source: 'local' };
   },
@@ -118,9 +93,7 @@ export const surveyApi = {
         serverSuccess = true;
         savedItem = json.data;
       }
-    } catch (err) {
-      console.warn('Backend not available to save, saving locally.');
-    }
+    } catch (err) {}
 
     // Always ensure it is also saved in local data
     const local = getLocalData();
@@ -131,14 +104,11 @@ export const surveyApi = {
       contact: contact || null
     };
     
-    // Check if not already in local array
-    const existingIndex = local.findIndex(item => item.id === newEntry.id);
-    if (existingIndex === -1) {
-      local.push(newEntry);
-    } else {
-      local[existingIndex] = newEntry;
-    }
+    local.push(newEntry);
     saveLocalData(local);
+
+    // Trigger Telegram alert if configured
+    dispatchTelegramNotification(answers, contact);
 
     return {
       success: true,
@@ -161,9 +131,7 @@ export const surveyApi = {
         if (res.ok) {
           serverSuccess = true;
         }
-      } catch (err) {
-        console.warn('Backend contact update failed, saving locally.');
-      }
+      } catch (err) {}
     }
 
     // Update in local storage
@@ -176,6 +144,9 @@ export const surveyApi = {
         savedAt: new Date().toISOString()
       };
       saveLocalData(local);
+
+      // Trigger notification with contact info
+      dispatchTelegramNotification(target.answers || {}, target.contact);
     }
 
     return {
@@ -224,5 +195,19 @@ export const surveyApi = {
       reader.onerror = () => reject(new Error('خطا در دسترسی به فایل'));
       reader.readAsText(file);
     });
+  },
+
+  // Telegram Config Helpers
+  getTelegramConfig() {
+    try {
+      const raw = localStorage.getItem(TELEGRAM_CONFIG_KEY);
+      return raw ? JSON.parse(raw) : { botToken: '', chatId: '' };
+    } catch (e) {
+      return { botToken: '', chatId: '' };
+    }
+  },
+
+  saveTelegramConfig(config) {
+    localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
   }
 };

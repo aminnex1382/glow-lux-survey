@@ -10,20 +10,26 @@ import {
   Award, 
   Code2, 
   Check, 
-  Copy,
-  Trash2,
-  Calendar,
-  Sparkles,
-  Phone,
-  User,
-  PhoneCall,
-  Search,
-  ExternalLink
+  Copy, 
+  Trash2, 
+  Calendar, 
+  Sparkles, 
+  Phone, 
+  User, 
+  PhoneCall, 
+  Search, 
+  Lock, 
+  KeyRound, 
+  Send, 
+  X,
+  Settings,
+  Bell
 } from 'lucide-react';
 import { QUESTIONS, SURVEY_INFO } from '../data/questions';
 import { surveyApi } from '../services/api';
+import { securityService } from '../services/security';
 
-export default function AdminDashboard({ responses, onRefresh, onBackToSurvey }) {
+export default function AdminDashboard({ responses, onRefresh, onBackToSurvey, onLogout }) {
   const [activeTab, setActiveTab] = useState('stats'); // 'stats' | 'leads' | 'rawJson'
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedPhoneIdx, setCopiedPhoneIdx] = useState(null);
@@ -31,6 +37,17 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
   const [searchTerm, setSearchTerm] = useState('');
   const [contactSearch, setContactSearch] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+
+  // Password change modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordStatusMsg, setPasswordStatusMsg] = useState({ type: '', text: '' });
+
+  // Telegram settings modal state
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [telegramConfig, setTelegramConfig] = useState(surveyApi.getTelegramConfig());
+  const [telegramSaved, setTelegramSaved] = useState(false);
 
   const totalParticipants = responses.length;
 
@@ -156,6 +173,41 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
     setTimeout(() => setCopiedAllPhones(false), 2500);
   };
 
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setPasswordStatusMsg({ type: 'error', text: 'رمز عبور باید حداقل ۶ کاراکتر باشد.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatusMsg({ type: 'error', text: 'تکرار رمز عبور با رمز جدید مطابقت ندارد.' });
+      return;
+    }
+
+    try {
+      await securityService.changePassword(newPassword);
+      setPasswordStatusMsg({ type: 'success', text: 'رمز عبور مدیریت با موفقیت تغییر یافت.' });
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setNewPassword('');
+        setConfirmPassword('');
+        setPasswordStatusMsg({ type: '', text: '' });
+      }, 1500);
+    } catch (err) {
+      setPasswordStatusMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleSaveTelegram = (e) => {
+    e.preventDefault();
+    surveyApi.saveTelegramConfig(telegramConfig);
+    setTelegramSaved(true);
+    setTimeout(() => {
+      setTelegramSaved(false);
+      setShowTelegramModal(false);
+    }, 1500);
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return 'نامشخص';
     try {
@@ -202,12 +254,30 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            آمار تفکیکی پاسخ‌ها، نظرات ثبت شده و اطلاعات تماس داوطلبانه مخاطبان
+            آمار تفکیکی پاسخ‌ها، نظرات و اطلاعات تماس محرمانه مخاطبان (رمزگذاری‌شده)
           </p>
         </div>
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            title="تغییر رمز عبور مدیریت"
+            className="px-3 py-2 rounded-xl bg-white hover:bg-rose-50 text-slate-700 text-xs font-bold border border-slate-200 shadow-sm transition flex items-center gap-1.5"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-rose-600" />
+            <span>تغییر رمز</span>
+          </button>
+
+          <button
+            onClick={() => setShowTelegramModal(true)}
+            title="تنظیمات دریافت در تلگرام"
+            className="px-3 py-2 rounded-xl bg-white hover:bg-sky-50 text-slate-700 text-xs font-bold border border-slate-200 shadow-sm transition flex items-center gap-1.5"
+          >
+            <Bell className="w-3.5 h-3.5 text-sky-600" />
+            <span>اطلاع‌رسانی تلگرام</span>
+          </button>
+
           <button
             onClick={onRefresh}
             title="بروزرسانی اطلاعات"
@@ -221,7 +291,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
             className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-[#e54576] to-[#b76e79] text-white text-xs sm:text-sm font-bold shadow-sm hover:shadow transition flex items-center gap-1.5"
           >
             <Download className="w-4 h-4" />
-            <span>دانلود responses.json</span>
+            <span>دانلود JSON</span>
           </button>
 
           <label className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold border border-slate-200 shadow-sm cursor-pointer transition flex items-center gap-1.5">
@@ -237,6 +307,15 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
             className="p-2.5 rounded-xl bg-white hover:bg-red-50 text-red-600 border border-red-200 shadow-sm transition"
           >
             <Trash2 className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onLogout}
+            title="خروج و قفل کردن پنل"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition flex items-center gap-1"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>قفل پنل</span>
           </button>
         </div>
       </div>
@@ -334,7 +413,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                   key={q.id}
                   className="glass-panel-luxury rounded-2xl p-5 sm:p-6 shadow-sm border border-rose-100"
                 >
-                  {/* Question Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-rose-100/80">
                     <div>
                       <span className="text-[11px] font-bold text-rose-600 px-2.5 py-0.5 rounded-full bg-rose-50 border border-rose-200 inline-block mb-1">
@@ -349,7 +427,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                     </div>
                   </div>
 
-                  {/* Options Percentage and Vote Counts */}
                   <div className="space-y-3">
                     {q.breakdown.map((item, optIdx) => (
                       <div key={optIdx} className="space-y-1.5">
@@ -376,7 +453,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                           </div>
                         </div>
 
-                        {/* Visual Progress Bar */}
                         <div className="w-full h-3 bg-rose-50 rounded-full overflow-hidden p-0.5 border border-rose-100/60">
                           <div
                             className={`h-full rounded-full transition-all duration-700 ease-out ${
@@ -414,7 +490,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                   </div>
                 </div>
 
-                {/* Search in feedbacks */}
                 {q.textEntries.length > 0 && (
                   <div className="mb-4">
                     <input
@@ -427,7 +502,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                   </div>
                 )}
 
-                {/* List of typed feedbacks */}
                 {filteredFeedbacks.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs sm:text-sm">
                     {q.textEntries.length === 0 
@@ -465,10 +539,9 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
         </div>
       )}
 
-      {/* TAB 2: Contact Leads (Name & Phone Numbers) */}
+      {/* TAB 2: Contact Leads */}
       {activeTab === 'leads' && (
         <div className="space-y-4">
-          {/* Leads Toolbar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/80 p-4 rounded-2xl border border-rose-100 shadow-sm">
             <div className="relative w-full sm:w-72">
               <input
@@ -494,18 +567,17 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                 ) : (
                   <>
                     <Copy className="w-3.5 h-3.5" />
-                    <span>کپی لیست شماره‌ها (جهت ارسال پیامک)</span>
+                    <span>کپی لیست شماره‌ها (جهت پیامک)</span>
                   </>
                 )}
               </button>
             )}
           </div>
 
-          {/* Leads Cards Grid */}
           {filteredLeads.length === 0 ? (
             <div className="glass-panel rounded-2xl p-12 text-center text-slate-400 text-sm border border-slate-200">
               {leads.length === 0 
-                ? 'هنوز هیچ مخاطبی اطلاعات تماس خود را وارد نکرده است.' 
+                ? 'هنوز هیچ مخاطبی اطلاعات تماس خود را ثبت نکرده است.' 
                 : 'موردی مطابق با جستجوی شما یافت نشد.'}
             </div>
           ) : (
@@ -536,7 +608,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                     </span>
                   </div>
 
-                  {/* Phone action box */}
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-1.5 text-xs sm:text-sm font-mono font-bold text-slate-800" dir="ltr">
                       <Phone className="w-3.5 h-3.5 text-rose-600" />
@@ -571,7 +642,6 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
                     </div>
                   </div>
 
-                  {/* Highlights from survey */}
                   <div className="text-[11px] text-slate-600 space-y-1 bg-white/70 p-2.5 rounded-xl border border-rose-50">
                     <p className="font-bold text-[10px] text-slate-400">گزیده‌ای از پاسخ‌های ثبت‌شده:</p>
                     {lead.answers.q1 && (
@@ -596,7 +666,7 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
         <div className="glass-panel-luxury rounded-2xl p-5 shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-slate-600 font-mono">
-              data/responses.json ({responses.length} آیتم شامل مشخصات تماس)
+              داده‌های امن ({responses.length} پاسخ ثبت‌شده)
             </span>
             <button
               onClick={handleCopyJson}
@@ -619,6 +689,130 @@ export default function AdminDashboard({ responses, onRefresh, onBackToSurvey })
           <pre className="p-4 rounded-xl bg-slate-900 text-emerald-400 font-mono text-xs overflow-x-auto max-h-[500px] leading-relaxed" dir="ltr">
             {JSON.stringify(responses, null, 2)}
           </pre>
+        </div>
+      )}
+
+      {/* Modal: Change Password */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl relative animate-scale-up border border-rose-100">
+            <button
+              onClick={() => setShowPasswordModal(false)}
+              className="absolute left-4 top-4 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <KeyRound className="w-5 h-5 text-rose-600" />
+              <h3 className="font-extrabold text-base text-slate-800">تغییر رمز عبور مدیریت</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              رمز جدید را وارد کنید. این رمز عبور در مرورگر شما رمزنگاری و ذخیره می‌شود.
+            </p>
+
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-3.5 text-right">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">رمز عبور جدید:</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="حداقل ۶ کاراکتر..."
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-200 focus:border-rose-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">تکرار رمز عبور جدید:</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="تکرار رمز جدید..."
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-200 focus:border-rose-400 outline-none"
+                />
+              </div>
+
+              {passwordStatusMsg.text && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold ${
+                  passwordStatusMsg.type === 'success' 
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {passwordStatusMsg.text}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#e54576] to-[#b76e79] text-white font-bold text-xs shadow-sm hover:shadow transition"
+              >
+                ذخیره رمز عبور جدید
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Telegram Notifications */}
+      {showTelegramModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-scale-up border border-rose-100">
+            <button
+              onClick={() => setShowTelegramModal(false)}
+              className="absolute left-4 top-4 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <Bell className="w-5 h-5 text-sky-600" />
+              <h3 className="font-extrabold text-base text-slate-800">دریافت فوری پاسخ‌ها در تلگرام</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              با تنظیم توکن ربات تلگرام و Chat ID خود، به محض ثبت پاسخ یا شماره تماس جدید توسط مخاطبان، یک پیام خصوصی فوری در تلگرام دریافت می‌کنید. اطلاعات کاملاً محرمانه مانده و در گیت‌هاب عمومی ذخیره نمی‌شود.
+            </p>
+
+            <form onSubmit={handleSaveTelegram} className="space-y-3.5 text-right">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Telegram Bot Token:</label>
+                <input
+                  type="text"
+                  value={telegramConfig.botToken}
+                  onChange={(e) => setTelegramConfig({ ...telegramConfig, botToken: e.target.value.trim() })}
+                  placeholder="مثال: 123456789:ABCdefGhIJKlmNoPQRstuVWXyz"
+                  dir="ltr"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-sky-400 outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Telegram Chat ID (شناسه عددی شما):</label>
+                <input
+                  type="text"
+                  value={telegramConfig.chatId}
+                  onChange={(e) => setTelegramConfig({ ...telegramConfig, chatId: e.target.value.trim() })}
+                  placeholder="مثال: 987654321"
+                  dir="ltr"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-sky-400 outline-none font-mono"
+                />
+              </div>
+
+              {telegramSaved && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
+                  تنظیمات تلگرام با موفقیت ذخیره شد!
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition"
+              >
+                ذخیره تنظیمات تلگرام
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

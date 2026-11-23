@@ -4,8 +4,10 @@ import WelcomeView from './components/WelcomeView';
 import QuestionWizard from './components/QuestionWizard';
 import CompletionView from './components/CompletionView';
 import AdminDashboard from './components/AdminDashboard';
+import AdminLogin from './components/AdminLogin';
 import { QUESTIONS, SURVEY_INFO } from './data/questions';
 import { surveyApi } from './services/api';
+import { securityService } from './services/security';
 import { Heart } from 'lucide-react';
 
 export default function App() {
@@ -28,6 +30,7 @@ export default function App() {
   };
 
   const [isAdminMode, setIsAdminMode] = useState(checkIsAdminSlug);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(securityService.isAuthenticated());
   const [surveyStep, setSurveyStep] = useState('welcome'); // 'welcome' | 'wizard' | 'completed'
   const [answers, setAnswers] = useState({});
   const [responses, setResponses] = useState([]);
@@ -98,9 +101,14 @@ export default function App() {
   };
 
   const handleExitAdmin = () => {
-    // Clear admin hash and return to normal site
     window.location.hash = '';
     setIsAdminMode(false);
+  };
+
+  const handleAdminLogout = () => {
+    securityService.setAuthenticated(false);
+    setIsAdminAuthenticated(false);
+    handleExitAdmin();
   };
 
   return (
@@ -114,14 +122,22 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 pb-12">
         {isAdminMode ? (
-          // Admin Dashboard is ONLY rendered when secret slug is typed in the URL
-          <AdminDashboard
-            responses={responses}
-            onRefresh={loadResponses}
-            onBackToSurvey={handleExitAdmin}
-          />
+          // Admin View: Guarded by Password Authentication Gate
+          !isAdminAuthenticated ? (
+            <AdminLogin
+              onLoginSuccess={() => setIsAdminAuthenticated(true)}
+              onBackToSurvey={handleExitAdmin}
+            />
+          ) : (
+            <AdminDashboard
+              responses={responses}
+              onRefresh={loadResponses}
+              onBackToSurvey={handleExitAdmin}
+              onLogout={handleAdminLogout}
+            />
+          )
         ) : (
-          // Regular visitors flow: No admin buttons, completely clean
+          // Regular visitors flow: Clean survey
           <>
             {surveyStep === 'welcome' && (
               <WelcomeView onStart={handleStartSurvey} />
@@ -147,7 +163,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Luxury Footer (Clean and without any admin links) */}
+      {/* Luxury Footer */}
       <footer className="border-t border-rose-100/80 bg-white/60 backdrop-blur-md py-6 text-center text-xs text-slate-500">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
