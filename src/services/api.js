@@ -1,9 +1,9 @@
-// API Service - Connected to PHP + MySQL Backend with SSL/Network Resilience
-// Default Backend Domain: https://torqyra.duckdns.org/api
+// API Service - Connected to PHP + MySQL Backend via Host Shared IP (No Domain)
+// Backend URL: http://185.211.57.7/~torqyrai/api
 
-const DEFAULT_API_BASE_URL = 'https://torqyra.duckdns.org/api';
+const DEFAULT_API_BASE_URL = 'http://185.211.57.7/~torqyrai/api';
 
-const API_URL_STORAGE_KEY = 'glow_lux_api_base_url';
+const API_URL_STORAGE_KEY = 'glow_lux_api_base_url_v2';
 const PENDING_SYNC_KEY = 'glow_lux_pending_sync_v1';
 const LOCAL_CACHE_RESPONSES_KEY = 'glow_lux_survey_vault_v3';
 const TELEGRAM_CONFIG_KEY = 'glow_lux_telegram_config';
@@ -22,6 +22,10 @@ export function getApiBaseUrl() {
     const saved = localStorage.getItem(API_URL_STORAGE_KEY);
     if (saved && saved.trim()) {
       return saved.trim().replace(/\/+$/, '');
+    }
+    // If hosted directly on the cPanel server IP, match its active protocol automatically
+    if (typeof window !== 'undefined' && window.location.hostname === '185.211.57.7') {
+      return `${window.location.protocol}//185.211.57.7/~torqyrai/api`;
     }
   } catch (e) {}
   return DEFAULT_API_BASE_URL;
@@ -80,9 +84,10 @@ async function apiFetch(endpoint, options = {}) {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const urlsToTry = [`${baseUrl}${cleanEndpoint}`];
 
-  // If currently running on plain HTTP (e.g. localhost testing) and URL is HTTPS,
-  // allow transparent fallback to HTTP if HTTPS fails due to missing SSL on host
-  if (typeof window !== 'undefined' && window.location.protocol === 'http:' && baseUrl.startsWith('https://')) {
+  // Try alternate protocol (HTTPS <-> HTTP) as seamless fallback depending on browser/SSL state
+  if (baseUrl.startsWith('http://')) {
+    urlsToTry.push(`${baseUrl.replace(/^http:\/\//, 'https://')}${cleanEndpoint}`);
+  } else if (baseUrl.startsWith('https://')) {
     urlsToTry.push(`${baseUrl.replace(/^https:\/\//, 'http://')}${cleanEndpoint}`);
   }
 

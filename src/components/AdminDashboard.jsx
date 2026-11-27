@@ -1498,7 +1498,7 @@ export default function AdminDashboard({
                   type="text"
                   value={apiUrlInput}
                   onChange={(e) => setApiUrlInput(e.target.value)}
-                  placeholder="https://torqyra.duckdns.org/api"
+                  placeholder="http://185.211.57.7/~torqyrai/api"
                   dir="ltr"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-rose-400 outline-none font-mono"
                 />
@@ -1515,7 +1515,7 @@ export default function AdminDashboard({
                 <button
                   type="button"
                   onClick={() => {
-                    const def = 'https://torqyra.duckdns.org/api';
+                    const def = 'http://185.211.57.7/~torqyrai/api';
                     setApiUrlInput(def);
                     handleTestServerConnection(def);
                   }}
@@ -1551,7 +1551,7 @@ export default function AdminDashboard({
               )}
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 leading-relaxed">
-                <strong>نکته مهم SSL:</strong> چون سایت گیت‌هاب پیجز روی HTTPS اجرا می‌شود، مرورگرها درخواست به آدرس‌های بدون SSL (HTTP) را مسدود می‌کنند. در صورت خطای SSL، فرانت‌اند به صورت خودکار داده‌ها را حفظ می‌کند تا با فعال‌سازی SSL رایگان (Cloudflare یا Let's Encrypt) روی دامنه خود، آن‌ها را به دیتابیس منتقل کنید.
+                <strong>نکته اتصال با IP بدون دامنه:</strong> چون گیت‌هاب پیجز روی HTTPS است و آی‌پی هاست گواهی SSL معتبر ندارد (Self-signed)، مرورگرها به‌طور پیش‌فرض درخواست سمت IP را محدود می‌کنند. در صورت عدم اتصال از روی گیت‌هاب، داده‌ها امن در حافظه ذخیره می‌شوند؛ همچنین اگر فایل‌های خروجی بیلد (<code>dist</code>) را مستقیماً در <code>http://185.211.57.7/~torqyrai/</code> قرار دهید، بدون هیچ محدودیت SSL مستقیماً به دیتابیس متصل می‌شود.
               </div>
             </div>
           </div>
