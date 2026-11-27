@@ -62,6 +62,7 @@ export default function AdminDashboard({
   const [copiedLinkRef, setCopiedLinkRef] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [contactSearch, setContactSearch] = useState('');
+  const [leadsFilterMode, setLeadsFilterMode] = useState('all'); // 'all' | 'contactsOnly'
   const [isResetting, setIsResetting] = useState(false);
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState(null);
 
@@ -109,20 +110,29 @@ export default function AdminDashboard({
 
   const totalParticipants = responses.length;
 
-  // Filter respondents who provided contact info OR came from personalized link
-  const leads = useMemo(() => {
-    return responses
-      .filter(r => (r.contact && (r.contact.fullName || r.contact.phone)) || r.metadata?.isPersonalized)
-      .map(r => ({
+  // Map ALL respondents (including anonymous ones) + filtered leads
+  const allRespondentsList = useMemo(() => {
+    return responses.map((r, index) => {
+      const hasContact = !!(r.contact && (r.contact.fullName || r.contact.phone));
+      const isVip = !!r.metadata?.isPersonalized;
+      const fallbackName = `کاربر ناشناس #${responses.length - index}`;
+      return {
         id: r.id,
-        fullName: r.metadata?.recipientName || r.contact?.fullName || 'ثبت نشده',
-        phone: r.contact?.phone || 'از طریق لینک اختصاصی (بدون دریافت شماره)',
-        isPersonalized: !!r.metadata?.isPersonalized,
+        fullName: r.metadata?.recipientName || r.contact?.fullName || fallbackName,
+        isAnonymous: !hasContact && !isVip,
+        phone: r.contact?.phone || (isVip ? 'از طریق لینک اختصاصی (بدون دریافت شماره)' : 'ثبت نشده (بی‌نام)'),
+        isPersonalized: isVip,
         refId: r.metadata?.refId || null,
         savedAt: r.contact?.savedAt || r.submittedAt,
         answers: r.answers || {}
-      }));
+      };
+    });
   }, [responses]);
+
+  // Filter respondents who provided contact info OR came from personalized link
+  const leads = useMemo(() => {
+    return allRespondentsList.filter(item => !item.isAnonymous);
+  }, [allRespondentsList]);
 
   // Compute analytics for all active questions
   const analytics = useMemo(() => {
@@ -380,8 +390,9 @@ export default function AdminDashboard({
   // Filter text responses
   const textQuestions = analytics.filter(q => q.type === 'text');
 
-  // Filter leads
-  const filteredLeads = leads.filter(l => 
+  // Filter leads / respondents based on active mode
+  const activeLeadsList = leadsFilterMode === 'all' ? allRespondentsList : leads;
+  const filteredLeads = activeLeadsList.filter(l => 
     l.fullName.toLowerCase().includes(contactSearch.toLowerCase()) ||
     l.phone.includes(contactSearch)
   );
@@ -497,6 +508,33 @@ export default function AdminDashboard({
         </div>
       </div>
 
+      {/* Offline / SSL Warning Banner if not connected to MySQL backend */}
+      {dataSource !== 'server' && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 text-right">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed">
+              <p className="font-extrabold text-amber-950 mb-0.5">
+                عدم اتصال به دیتابیس سرور ({dataSource === 'checking' ? 'در حال بررسی...' : 'بلاک مرورگر روی SSL / HTTPS'})
+              </p>
+              <p>
+                اگر الان این صفحه را از روی <strong>گیت‌هاب (HTTPS)</strong> باز کرده‌اید، مرورگر به‌طور امنیتی اجازه ارسال پاسخ دیگران به IP بدون SSL (<code className="font-mono font-bold" dir="ltr">http://185.211.57.7/~torqyrai/api</code>) را نمی‌دهد. برای دیدن پاسخ تمام کاربران در دیتابیس، فایل‌های خروجی بیلد را روی هاست در آدرس <code className="font-mono font-bold" dir="ltr">http://185.211.57.7/~torqyrai/</code> باز کنید.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setApiUrlInput(surveyApi.getApiBaseUrl());
+              setShowServerModal(true);
+              handleTestServerConnection();
+            }}
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex-shrink-0 transition shadow-sm"
+          >
+            بررسی اتصال و همگام‌سازی
+          </button>
+        </div>
+      )}
+
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-sm border border-rose-100">
@@ -604,9 +642,9 @@ export default function AdminDashboard({
           }`}
         >
           <Phone className="w-4 h-4 text-amber-500" />
-          <span>اطلاعات تماس و لیدها</span>
+          <span>پاسخ‌ها و اطلاعات تماس</span>
           <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1">
-            {leads.length}
+            {allRespondentsList.length}
           </span>
         </button>
 
@@ -1111,15 +1149,38 @@ export default function AdminDashboard({
       {activeTab === 'leads' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/80 p-4 rounded-2xl border border-rose-100 shadow-sm">
-            <div className="relative w-full sm:w-72">
-              <input
-                type="text"
-                placeholder="جستجو بر اساس نام یا شماره تماس..."
-                value={contactSearch}
-                onChange={(e) => setContactSearch(e.target.value)}
-                className="w-full pr-8 pl-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="جستجو بر اساس نام یا شماره تماس..."
+                  value={contactSearch}
+                  onChange={(e) => setContactSearch(e.target.value)}
+                  className="w-full pr-8 pl-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              </div>
+
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setLeadsFilterMode('all')}
+                  className={`px-3 py-1.5 rounded-lg transition ${
+                    leadsFilterMode === 'all' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  همه پاسخ‌ها ({allRespondentsList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeadsFilterMode('contactsOnly')}
+                  className={`px-3 py-1.5 rounded-lg transition ${
+                    leadsFilterMode === 'contactsOnly' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  فقط با شماره/VIP ({leads.length})
+                </button>
+              </div>
             </div>
 
             {leads.length > 0 && (
@@ -1144,8 +1205,8 @@ export default function AdminDashboard({
 
           {filteredLeads.length === 0 ? (
             <div className="glass-panel rounded-2xl p-12 text-center text-slate-400 text-sm border border-slate-200">
-              {leads.length === 0 
-                ? 'هنوز هیچ مخاطبی اطلاعات تماس یا پاسخ ثبت نکرده است.' 
+              {activeLeadsList.length === 0 
+                ? 'هنوز هیچ پاسخی در این بخش ثبت نشده است.' 
                 : 'موردی مطابق با جستجوی شما یافت نشد.'}
             </div>
           ) : (
@@ -1221,7 +1282,7 @@ export default function AdminDashboard({
                         <span>{lead.phone}</span>
                       </div>
 
-                      {!lead.isPersonalized && lead.phone !== 'ثبت نشده' && (
+                      {!lead.isPersonalized && !lead.isAnonymous && lead.phone !== 'ثبت نشده' && !lead.phone.includes('ثبت نشده') && (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
