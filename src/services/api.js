@@ -1,80 +1,165 @@
-// API and Data Persistence Service (Secure, Full Telegram Dispatch & Personalized Links)
+// API Service - Connected to PHP + MySQL Backend with SSL/Network Resilience
+// Default Backend Domain: https://torqyra.duckdns.org/api
 
-const INITIAL_FALLBACK_DATA = [];
+const DEFAULT_API_BASE_URL = 'https://torqyra.duckdns.org/api';
 
-const STORAGE_KEY = 'glow_lux_survey_vault_v3';
+const API_URL_STORAGE_KEY = 'glow_lux_api_base_url';
+const PENDING_SYNC_KEY = 'glow_lux_pending_sync_v1';
+const LOCAL_CACHE_RESPONSES_KEY = 'glow_lux_survey_vault_v3';
 const TELEGRAM_CONFIG_KEY = 'glow_lux_telegram_config';
 const PERSONALIZED_LINKS_KEY = 'glow_lux_personalized_links_v1';
 
-function getLocalData() {
+// Track connection health for Admin Dashboard diagnostics
+let lastServerStatus = {
+  online: null, // null = untested, true = connected, false = unreachable/ssl error
+  lastChecked: null,
+  errorDetail: null,
+  isSslIssue: false
+};
+
+export function getApiBaseUrl() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return INITIAL_FALLBACK_DATA;
+    const saved = localStorage.getItem(API_URL_STORAGE_KEY);
+    if (saved && saved.trim()) {
+      return saved.trim().replace(/\/+$/, '');
     }
-    return JSON.parse(raw);
-  } catch (e) {
-    return INITIAL_FALLBACK_DATA;
-  }
+  } catch (e) {}
+  return DEFAULT_API_BASE_URL;
 }
 
-function saveLocalData(data) {
+export function setApiBaseUrl(url) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (!url || !url.trim()) {
+      localStorage.removeItem(API_URL_STORAGE_KEY);
+    } else {
+      localStorage.setItem(API_URL_STORAGE_KEY, url.trim().replace(/\/+$/, ''));
+    }
+  } catch (e) {}
+}
+
+export function getLastServerStatus() {
+  return { ...lastServerStatus };
+}
+
+// Local Fallback Helpers (Used ONLY as resilient buffer when backend/SSL is unreachable)
+function getCachedResponses() {
+  try {
+    const raw = localStorage.getItem(LOCAL_CACHE_RESPONSES_KEY);
+    return raw ? JSON.parse(raw) : [];
   } catch (e) {
-    console.error('LocalStorage write failed:', e);
+    return [];
   }
 }
 
-// Helper to chunk and send Telegram messages (respecting 4096 character limit)
-async function sendTelegramMessage(botToken, chatId, htmlText) {
-  const MAX_CHUNK = 3800;
-  if (htmlText.length <= MAX_CHUNK) {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: htmlText,
-        parse_mode: 'HTML'
-      })
-    });
-  } else {
-    // Split text into chunks
-    const lines = htmlText.split('\n');
-    let currentChunk = '';
-    for (const line of lines) {
-      if ((currentChunk + '\n' + line).length > MAX_CHUNK) {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: currentChunk,
-            parse_mode: 'HTML'
-          })
-        });
-        currentChunk = line;
-      } else {
-        currentChunk += (currentChunk ? '\n' : '') + line;
+function saveCachedResponses(data) {
+  try {
+    localStorage.setItem(LOCAL_CACHE_RESPONSES_KEY, JSON.stringify(data));
+  } catch (e) {}
+}
+
+function getPendingSyncQueue() {
+  try {
+    const raw = localStorage.getItem(PENDING_SYNC_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePendingSyncQueue(queue) {
+  try {
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
+  } catch (e) {}
+}
+
+/**
+ * Resilient fetch wrapper with timeout and SSL/Mixed-Content handling
+ */
+async function apiFetch(endpoint, options = {}) {
+  const baseUrl = getApiBaseUrl();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const urlsToTry = [`${baseUrl}${cleanEndpoint}`];
+
+  // If currently running on plain HTTP (e.g. localhost testing) and URL is HTTPS,
+  // allow transparent fallback to HTTP if HTTPS fails due to missing SSL on host
+  if (typeof window !== 'undefined' && window.location.protocol === 'http:' && baseUrl.startsWith('https://')) {
+    urlsToTry.push(`${baseUrl.replace(/^https:\/\//, 'http://')}${cleanEndpoint}`);
+  }
+
+  let lastError = null;
+
+  for (const targetUrl of urlsToTry) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs || 8000);
+
+    try {
+      const fetchOptions = {
+        method: options.method || 'GET',
+        signal: controller.signal,
+        mode: 'cors'
+      };
+
+      if (options.body) {
+        fetchOptions.headers = {
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        };
+        fetchOptions.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+      } else if (options.headers) {
+        fetchOptions.headers = options.headers;
       }
-    }
-    if (currentChunk.trim()) {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: currentChunk,
-          parse_mode: 'HTML'
-        })
-      });
+
+      const response = await fetch(targetUrl, fetchOptions);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errText = `HTTP ${response.status}`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) errText = errJson.error;
+        } catch (e) {}
+        throw new Error(errText);
+      }
+
+      const json = await response.json();
+      lastServerStatus = {
+        online: true,
+        lastChecked: new Date().toISOString(),
+        errorDetail: null,
+        isSslIssue: false
+      };
+      return json;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
     }
   }
+
+  // Detect probable SSL / Mixed-Content / Network error without crashing UI
+  const errMsg = lastError?.name === 'AbortError'
+    ? 'اتصال به سرور بک‌اند به دلیل تایم‌اوت قطع شد.'
+    : (lastError?.message || 'خطا در برقراری ارتباط با سرور بک‌اند');
+
+  const isLikelySslOrCors = errMsg.includes('Failed to fetch') ||
+                            errMsg.includes('NetworkError') ||
+                            errMsg.includes('Load failed') ||
+                            errMsg.includes('SSL') ||
+                            errMsg.includes('certificate');
+
+  lastServerStatus = {
+    online: false,
+    lastChecked: new Date().toISOString(),
+    errorDetail: isLikelySslOrCors
+      ? 'عدم دسترسی به سرور یا خطای گواهی SSL (مرورگر درخواست ناامن یا گواهی نامعتبر را مسدود کرده است).'
+      : errMsg,
+    isSslIssue: isLikelySslOrCors
+  };
+
+  throw lastError || new Error(errMsg);
 }
 
-// Send COMPLETE and thorough details of all questions and answers to Telegram
-async function dispatchTelegramNotification(answers, contact, metadata, questions = []) {
+// Client-side Telegram Fallback (Only used if PHP backend could not be reached)
+async function dispatchClientTelegramFallback(answers, contact, metadata, questions = []) {
   try {
     const rawConfig = localStorage.getItem(TELEGRAM_CONFIG_KEY);
     if (!rawConfig) return;
@@ -95,139 +180,198 @@ async function dispatchTelegramNotification(answers, contact, metadata, question
     if (metadata?.isPersonalized && metadata?.recipientName) {
       header += `🎯 <b>نوع پاسخ:</b> لینک اختصاصی ویژه 💎\n`;
       header += `👤 <b>مخاطب اختصاصی:</b> <u>${metadata.recipientName}</u>\n`;
-      if (metadata.refId) {
-        header += `🆔 <b>شناسه لینک:</b> <code>${metadata.refId}</code>\n`;
-      }
-      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     } else if (contact && (contact.fullName || contact.phone)) {
       header += `👤 <b>نام کاربر:</b> ${contact.fullName || 'ثبت نشده'}\n`;
       header += `📞 <b>شماره تماس:</b> <code>${contact.phone || 'ثبت نشده'}</code>\n`;
-      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     } else {
       header += `👤 <b>مخاطب:</b> عمومی (بدون ثبت شماره)\n`;
-      header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
+    header += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    let questionsBody = `📋 <b>جزئیات کامل تمام پاسخ‌ها:</b>\n\n`;
+    let body = `📋 <b>جزئیات کامل تمام پاسخ‌ها:</b>\n\n`;
+    questions.forEach((q, idx) => {
+      const ans = answers[q.id];
+      const disp = ans && ans.toString().trim() ? ans.toString().trim() : '<i>(بدون پاسخ)</i>';
+      body += `<b>${idx + 1}. ${q.question}</b>\n👉 <b>پاسخ:</b> ${disp}\n\n`;
+    });
 
-    if (Array.isArray(questions) && questions.length > 0) {
-      questions.forEach((q, idx) => {
-        const ans = answers[q.id];
-        const displayAnswer = ans && ans.trim() ? ans.trim() : '<i>(بدون پاسخ)</i>';
-        questionsBody += `<b>${idx + 1}. ${q.question}</b>\n`;
-        questionsBody += `👉 <b>پاسخ:</b> ${displayAnswer}\n\n`;
-      });
-    } else {
-      // Fallback if questions array not passed
-      Object.entries(answers).forEach(([key, val], idx) => {
-        if (val && val.trim()) {
-          questionsBody += `<b>سوال ${key}:</b> ${val.trim()}\n\n`;
-        }
-      });
-    }
-
-    questionsBody += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    questionsBody += `🌿 راز زیبایی ماندگار | از نگاه علم`;
-
-    const fullMessage = header + questionsBody;
-    await sendTelegramMessage(config.botToken, config.chatId, fullMessage);
-  } catch (err) {
-    console.warn('Telegram full notification failed:', err);
-  }
+    const fullMsg = header + body + `━━━━━━━━━━━━━━━━━━━━━━\n🌿 راز زیبایی ماندگار`;
+    await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: config.chatId,
+        text: fullMsg.slice(0, 4000),
+        parse_mode: 'HTML'
+      })
+    });
+  } catch (e) {}
 }
 
 export const surveyApi = {
-  // Fetch all responses (tries API first, falls back to localStorage)
-  async fetchResponses() {
+  getApiBaseUrl,
+  setApiBaseUrl,
+  getLastServerStatus,
+
+  // Ping backend server & check MySQL status
+  async pingServer() {
     try {
-      const res = await fetch('/api/responses');
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data) {
-          saveLocalData(json.data); // sync local copy
-          return { data: json.data, source: 'server' };
-        }
-      }
-    } catch (err) {}
-    return { data: getLocalData(), source: 'local' };
+      const res = await apiFetch('/index.php', { timeoutMs: 6000 });
+      return {
+        online: true,
+        ...res
+      };
+    } catch (err) {
+      return {
+        online: false,
+        error: lastServerStatus.errorDetail || err.message,
+        isSslIssue: lastServerStatus.isSslIssue
+      };
+    }
   },
 
-  // Submit response with answers, optional contact, metadata (personalized link info), and questions definition
-  async submitResponse(answers, contact = null, metadata = null, questions = []) {
-    let serverSuccess = false;
-    let savedItem = null;
+  // Get count of unsynced offline items
+  getPendingSyncCount() {
+    return getPendingSyncQueue().length;
+  },
 
-    try {
-      const res = await fetch('/api/responses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, contact, metadata })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        serverSuccess = true;
-        savedItem = json.data;
+  // Sync any offline-queued submissions to MySQL backend
+  async syncPendingToServer() {
+    const queue = getPendingSyncQueue();
+    if (queue.length === 0) return { synced: 0, remaining: 0 };
+
+    const remaining = [];
+    let synced = 0;
+
+    for (const item of queue) {
+      try {
+        await apiFetch('/responses.php', {
+          method: 'POST',
+          body: {
+            answers: item.answers,
+            contact: item.contact,
+            metadata: item.metadata,
+            questions: item.questions || []
+          }
+        });
+        synced++;
+      } catch (e) {
+        remaining.push(item);
       }
-    } catch (err) {}
+    }
 
-    // Always ensure it is also saved in local data
-    const local = getLocalData();
-    const newEntry = savedItem || {
+    savePendingSyncQueue(remaining);
+    return { synced, remaining: remaining.length };
+  },
+
+  // ==========================================
+  // Responses CRUD (MySQL Backend Primary)
+  // ==========================================
+  async fetchResponses() {
+    try {
+      const json = await apiFetch('/responses.php');
+      if (json.success && Array.isArray(json.data)) {
+        saveCachedResponses(json.data);
+        return { data: json.data, source: 'server' };
+      }
+    } catch (err) {
+      console.warn('Backend fetchResponses unavailable, falling back to cache:', err.message);
+    }
+    return { data: getCachedResponses(), source: 'local' };
+  },
+
+  async submitResponse(answers, contact = null, metadata = null, questions = []) {
+    try {
+      const json = await apiFetch('/responses.php', {
+        method: 'POST',
+        body: { answers, contact, metadata, questions }
+      });
+
+      if (json.success && json.data) {
+        const cached = getCachedResponses();
+        cached.unshift(json.data);
+        saveCachedResponses(cached);
+        return {
+          success: true,
+          savedItem: json.data,
+          source: 'server'
+        };
+      }
+    } catch (err) {
+      console.warn('Backend submitResponse failed (SSL/Network), buffering locally:', err.message);
+    }
+
+    // Resilient fallback if backend is temporarily unreachable or blocked by SSL
+    const fallbackItem = {
       id: 'resp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       submittedAt: new Date().toISOString(),
       answers,
       contact: contact || null,
       metadata: metadata || null
     };
-    
-    local.push(newEntry);
-    saveLocalData(local);
 
-    // If response was from a personalized link, mark it as answered
-    if (metadata?.refId) {
-      this.markPersonalizedLinkAnswered(metadata.refId, newEntry.id);
-    }
+    const cached = getCachedResponses();
+    cached.unshift(fallbackItem);
+    saveCachedResponses(cached);
 
-    // Trigger full Telegram alert with all questions & answers
-    dispatchTelegramNotification(answers, contact, metadata, questions);
+    // Queue for future database sync
+    const queue = getPendingSyncQueue();
+    queue.push({ ...fallbackItem, questions });
+    savePendingSyncQueue(queue);
+
+    // Try client Telegram fallback
+    dispatchClientTelegramFallback(answers, contact, metadata, questions);
 
     return {
       success: true,
-      savedItem: newEntry,
-      source: serverSuccess ? 'server' : 'local'
+      savedItem: fallbackItem,
+      source: 'local'
     };
   },
 
-  // Save / Update contact info for an existing response
   async saveContactInfo(responseId, contactData, questions = []) {
     let serverSuccess = false;
-
-    if (responseId) {
-      try {
-        const res = await fetch(`/api/responses/${responseId}/contact`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(contactData)
-        });
-        if (res.ok) {
-          serverSuccess = true;
+    try {
+      const json = await apiFetch('/contact.php', {
+        method: 'POST',
+        body: {
+          responseId,
+          fullName: contactData.fullName || '',
+          phone: contactData.phone || '',
+          questions
         }
-      } catch (err) {}
+      });
+      if (json.success) {
+        serverSuccess = true;
+      }
+    } catch (err) {
+      console.warn('Backend saveContactInfo failed, updating local buffer:', err.message);
     }
 
-    // Update in local storage
-    const local = getLocalData();
-    const target = local.find(item => item.id === responseId) || local[local.length - 1];
-    if (target) {
-      target.contact = {
-        fullName: contactData.fullName || '',
-        phone: contactData.phone || '',
-        savedAt: new Date().toISOString()
-      };
-      saveLocalData(local);
+    // Update local cache & pending queue if item was buffered
+    const contactObj = {
+      fullName: contactData.fullName || '',
+      phone: contactData.phone || '',
+      savedAt: new Date().toISOString()
+    };
 
-      // Re-trigger full Telegram notification with contact info
-      dispatchTelegramNotification(target.answers || {}, target.contact, target.metadata, questions);
+    const cached = getCachedResponses();
+    const target = cached.find(item => item.id === responseId) || cached[0];
+    if (target) {
+      target.contact = contactObj;
+      saveCachedResponses(cached);
+    }
+
+    if (!serverSuccess) {
+      const queue = getPendingSyncQueue();
+      const qTarget = queue.find(item => item.id === responseId);
+      if (qTarget) {
+        qTarget.contact = contactObj;
+        savePendingSyncQueue(queue);
+      }
+      if (target) {
+        dispatchClientTelegramFallback(target.answers || {}, contactObj, target.metadata, questions);
+      }
     }
 
     return {
@@ -236,65 +380,66 @@ export const surveyApi = {
     };
   },
 
-  // Reset all responses
   async resetResponses() {
     try {
-      await fetch('/api/responses', { method: 'DELETE' });
+      await apiFetch('/responses.php', { method: 'DELETE' });
     } catch (e) {}
-    saveLocalData([]);
+    saveCachedResponses([]);
+    savePendingSyncQueue([]);
     return true;
   },
 
-  // Export responses as JSON file
-  downloadJson(responses) {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(responses, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `glow_lux_survey_responses_${new Date().toISOString().slice(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  },
-
-  // Import responses from JSON
-  async importJson(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const parsed = JSON.parse(e.target.result);
-          if (Array.isArray(parsed)) {
-            saveLocalData(parsed);
-            resolve(parsed);
-          } else {
-            reject(new Error('ساختار فایل JSON باید یک آرایه از پاسخ‌ها باشد.'));
-          }
-        } catch (err) {
-          reject(new Error('خطا در خواندن فایل JSON: ' + err.message));
-        }
-      };
-      reader.onerror = () => reject(new Error('خطا در دسترسی به فایل'));
-      reader.readAsText(file);
-    });
-  },
-
-  // Telegram Config Helpers
-  getTelegramConfig() {
+  // ==========================================
+  // Dynamic Questions (MySQL Backend Primary)
+  // ==========================================
+  async fetchQuestions() {
     try {
-      const raw = localStorage.getItem(TELEGRAM_CONFIG_KEY);
-      return raw ? JSON.parse(raw) : { botToken: '', chatId: '' };
-    } catch (e) {
-      return { botToken: '', chatId: '' };
+      const json = await apiFetch('/questions.php');
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        return { data: json.data, source: 'server' };
+      }
+    } catch (err) {
+      console.warn('Backend fetchQuestions unavailable:', err.message);
+    }
+    return { data: null, source: 'local' };
+  },
+
+  async saveQuestionsToServer(questionsList) {
+    try {
+      const json = await apiFetch('/questions.php', {
+        method: 'POST',
+        body: { questions: questionsList }
+      });
+      return { success: !!json.success, source: 'server' };
+    } catch (err) {
+      return { success: false, source: 'local', error: err.message };
     }
   },
 
-  saveTelegramConfig(config) {
-    localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
+  async resetQuestionsOnServer() {
+    try {
+      const json = await apiFetch('/questions.php', { method: 'PUT' });
+      if (json.success && Array.isArray(json.data)) {
+        return { success: true, data: json.data, source: 'server' };
+      }
+    } catch (err) {}
+    return { success: false, source: 'local' };
   },
 
   // ==========================================
-  // Personalized Links Management
+  // Personalized VIP Links (MySQL Backend Primary)
   // ==========================================
+  async fetchPersonalizedLinks() {
+    try {
+      const json = await apiFetch('/links.php');
+      if (json.success && Array.isArray(json.data)) {
+        localStorage.setItem(PERSONALIZED_LINKS_KEY, JSON.stringify(json.data));
+        return json.data;
+      }
+    } catch (err) {}
+    return this.getPersonalizedLinks();
+  },
+
   getPersonalizedLinks() {
     try {
       const raw = localStorage.getItem(PERSONALIZED_LINKS_KEY);
@@ -310,11 +455,24 @@ export const surveyApi = {
     } catch (e) {}
   },
 
-  createPersonalizedLink(recipientName, note = '') {
+  async createPersonalizedLink(recipientName, note = '') {
+    try {
+      const json = await apiFetch('/links.php', {
+        method: 'POST',
+        body: { recipientName, note }
+      });
+      if (json.success && json.data) {
+        const links = this.getPersonalizedLinks();
+        links.unshift(json.data);
+        this.savePersonalizedLinks(links);
+        return json.data;
+      }
+    } catch (err) {}
+
+    // Fallback
     const links = this.getPersonalizedLinks();
-    const refId = 'vip_' + Math.random().toString(36).substring(2, 8);
     const newLink = {
-      id: refId,
+      id: 'vip_' + Math.random().toString(36).substring(2, 8),
       recipientName: recipientName.trim(),
       note: note.trim(),
       createdAt: new Date().toISOString(),
@@ -322,26 +480,96 @@ export const surveyApi = {
       responseId: null,
       answeredAt: null
     };
-
     links.unshift(newLink);
     this.savePersonalizedLinks(links);
     return newLink;
   },
 
-  deletePersonalizedLink(id) {
+  async deletePersonalizedLink(id) {
+    try {
+      await apiFetch(`/links.php?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {}
+
     const links = this.getPersonalizedLinks().filter(l => l.id !== id);
     this.savePersonalizedLinks(links);
     return links;
   },
 
-  markPersonalizedLinkAnswered(refId, responseId) {
-    const links = this.getPersonalizedLinks();
-    const link = links.find(l => l.id === refId);
-    if (link) {
-      link.isAnswered = true;
-      link.responseId = responseId;
-      link.answeredAt = new Date().toISOString();
-      this.savePersonalizedLinks(links);
+  // ==========================================
+  // Settings & Telegram Config (MySQL Backend)
+  // ==========================================
+  async fetchTelegramConfig() {
+    try {
+      const json = await apiFetch('/settings.php');
+      if (json.success && json.data) {
+        const cfg = {
+          botToken: json.data.botToken || '',
+          chatId: json.data.chatId || ''
+        };
+        localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(cfg));
+        return cfg;
+      }
+    } catch (err) {}
+    return this.getTelegramConfig();
+  },
+
+  getTelegramConfig() {
+    try {
+      const raw = localStorage.getItem(TELEGRAM_CONFIG_KEY);
+      return raw ? JSON.parse(raw) : { botToken: '', chatId: '' };
+    } catch (e) {
+      return { botToken: '', chatId: '' };
     }
+  },
+
+  async saveTelegramConfig(config) {
+    localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
+    try {
+      await apiFetch('/settings.php', {
+        method: 'POST',
+        body: {
+          action: 'telegram',
+          botToken: config.botToken,
+          chatId: config.chatId
+        }
+      });
+      return true;
+    } catch (err) {
+      return false;
+    }
+  },
+
+  // JSON Export / Import Helpers
+  downloadJson(responses) {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(responses, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `glow_lux_survey_responses_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  },
+
+  async importJson(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (Array.isArray(parsed)) {
+            saveCachedResponses(parsed);
+            resolve(parsed);
+          } else {
+            reject(new Error('ساختار فایل JSON باید یک آرایه از پاسخ‌ها باشد.'));
+          }
+        } catch (err) {
+          reject(new Error('خطا در خواندن فایل JSON: ' + err.message));
+        }
+      };
+      reader.onerror = () => reject(new Error('خطا در دسترسی به فایل'));
+      reader.readAsText(file);
+    });
   }
 };

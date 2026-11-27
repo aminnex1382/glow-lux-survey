@@ -71,6 +71,7 @@ export default function App() {
   const [personalizedUser, setPersonalizedUser] = useState(parsePersonalizedParams);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmittedId, setLastSubmittedId] = useState(null);
+  const [dataSource, setDataSource] = useState('checking'); // 'server' | 'local' | 'checking'
 
   // Sync with URL hash changes
   useEffect(() => {
@@ -91,21 +92,37 @@ export default function App() {
   const loadResponses = useCallback(async () => {
     const result = await surveyApi.fetchResponses();
     setResponses(result.data || []);
+    setDataSource(result.source || 'local');
+  }, []);
+
+  const loadQuestions = useCallback(async () => {
+    const result = await surveyApi.fetchQuestions();
+    if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+      saveDynamicQuestions(result.data);
+      setQuestions(result.data);
+    }
   }, []);
 
   useEffect(() => {
     loadResponses();
-  }, [loadResponses]);
+    loadQuestions();
+  }, [loadResponses, loadQuestions]);
 
   // Dynamic Question management handlers
-  const handleUpdateQuestions = (newQuestions) => {
+  const handleUpdateQuestions = async (newQuestions) => {
     saveDynamicQuestions(newQuestions);
     setQuestions(newQuestions);
+    await surveyApi.saveQuestionsToServer(newQuestions);
   };
 
-  const handleResetQuestions = () => {
+  const handleResetQuestions = async () => {
     const defaults = resetDynamicQuestions();
     setQuestions(defaults);
+    const serverRes = await surveyApi.resetQuestionsOnServer();
+    if (serverRes.success && serverRes.data) {
+      saveDynamicQuestions(serverRes.data);
+      setQuestions(serverRes.data);
+    }
   };
 
   const handleAnswerChange = (questionId, value) => {
@@ -185,6 +202,7 @@ export default function App() {
             <AdminDashboard
               responses={responses}
               questions={questions}
+              dataSource={dataSource}
               onUpdateQuestions={handleUpdateQuestions}
               onResetQuestions={handleResetQuestions}
               onRefresh={loadResponses}

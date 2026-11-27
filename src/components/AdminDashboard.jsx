@@ -33,7 +33,12 @@ import {
   CheckCircle2,
   Clock,
   Layers,
-  Eye
+  Eye,
+  Server,
+  Database,
+  Wifi,
+  WifiOff,
+  AlertTriangle
 } from 'lucide-react';
 import { surveyApi } from '../services/api';
 import { securityService } from '../services/security';
@@ -43,6 +48,7 @@ import UserAnswersModal from './UserAnswersModal';
 export default function AdminDashboard({ 
   responses, 
   questions, 
+  dataSource = 'local',
   onUpdateQuestions,
   onResetQuestions,
   onRefresh, 
@@ -80,9 +86,25 @@ export default function AdminDashboard({
   const [telegramConfig, setTelegramConfig] = useState(surveyApi.getTelegramConfig());
   const [telegramSaved, setTelegramSaved] = useState(false);
 
-  // Load personalized links on mount
+  // Server & Backend API settings modal state
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [apiUrlInput, setApiUrlInput] = useState(surveyApi.getApiBaseUrl());
+  const [serverPingResult, setServerPingResult] = useState(null);
+  const [isPingingServer, setIsPingingServer] = useState(false);
+  const [isSyncingPending, setIsSyncingPending] = useState(false);
+  const [syncResultMsg, setSyncResultMsg] = useState('');
+
+  // Load personalized links and telegram config from PHP backend on mount
   useEffect(() => {
-    setPersonalizedLinks(surveyApi.getPersonalizedLinks());
+    let mounted = true;
+    (async () => {
+      const links = await surveyApi.fetchPersonalizedLinks();
+      if (mounted) setPersonalizedLinks(links);
+
+      const tg = await surveyApi.fetchTelegramConfig();
+      if (mounted) setTelegramConfig(tg);
+    })();
+    return () => { mounted = false; };
   }, []);
 
   const totalParticipants = responses.length;
@@ -168,15 +190,16 @@ export default function AdminDashboard({
   }, [responses, questions]);
 
   // Handle Personalized Link Creation
-  const handleCreatePersonalizedLink = (e) => {
+  const handleCreatePersonalizedLink = async (e) => {
     e.preventDefault();
     if (!newRecipientName.trim()) {
       alert('لطفاً نام مخاطب را وارد کنید.');
       return;
     }
 
-    const created = surveyApi.createPersonalizedLink(newRecipientName, newRecipientNote);
-    setPersonalizedLinks(surveyApi.getPersonalizedLinks());
+    const created = await surveyApi.createPersonalizedLink(newRecipientName, newRecipientNote);
+    const updatedLinks = await surveyApi.fetchPersonalizedLinks();
+    setPersonalizedLinks(updatedLinks);
     setNewRecipientName('');
     setNewRecipientNote('');
     setLinkCreateSuccess(created);
@@ -197,9 +220,9 @@ export default function AdminDashboard({
     setTimeout(() => setCopiedLinkRef(null), 2000);
   };
 
-  const handleDeletePersonalizedLink = (id) => {
+  const handleDeletePersonalizedLink = async (id) => {
     if (window.confirm('آیا مطمئن هستید که این لینک اختصاصی حذف شود؟')) {
-      const updated = surveyApi.deletePersonalizedLink(id);
+      const updated = await surveyApi.deletePersonalizedLink(id);
       setPersonalizedLinks(updated);
     }
   };
@@ -305,14 +328,38 @@ export default function AdminDashboard({
     }
   };
 
-  const handleSaveTelegram = (e) => {
+  const handleSaveTelegram = async (e) => {
     e.preventDefault();
-    surveyApi.saveTelegramConfig(telegramConfig);
+    await surveyApi.saveTelegramConfig(telegramConfig);
     setTelegramSaved(true);
     setTimeout(() => {
       setTelegramSaved(false);
       setShowTelegramModal(false);
     }, 1500);
+  };
+
+  const handleTestServerConnection = async (customUrl) => {
+    if (typeof customUrl === 'string') {
+      surveyApi.setApiBaseUrl(customUrl);
+    }
+    setIsPingingServer(true);
+    const res = await surveyApi.pingServer();
+    setServerPingResult(res);
+    setIsPingingServer(false);
+    if (res.online) {
+      onRefresh();
+    }
+  };
+
+  const handleSyncPendingData = async () => {
+    setIsSyncingPending(true);
+    setSyncResultMsg('');
+    const result = await surveyApi.syncPendingToServer();
+    setIsSyncingPending(false);
+    setSyncResultMsg(`تعداد ${result.synced} پاسخ با موفقیت به دیتابیس ارسال شد. (${result.remaining} مورد باقیمانده)`);
+    if (result.synced > 0) {
+      onRefresh();
+    }
   };
 
   const formatDate = (dateStr) => {
@@ -364,6 +411,32 @@ export default function AdminDashboard({
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setApiUrlInput(surveyApi.getApiBaseUrl());
+              setShowServerModal(true);
+              handleTestServerConnection();
+            }}
+            title="وضعیت اتصال به سرور و دیتابیس MySQL"
+            className={`px-3 py-2 rounded-xl text-xs font-bold border shadow-sm transition flex items-center gap-1.5 ${
+              dataSource === 'server'
+                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+            }`}
+          >
+            {dataSource === 'server' ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-emerald-600" />
+                <span>دیتابیس سرور (متصل)</span>
+              </>
+            ) : (
+              <>
+                <Server className="w-3.5 h-3.5 text-amber-600" />
+                <span>تنظیمات سرور و SSL</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={() => setShowPasswordModal(true)}
             title="تغییر رمز عبور مدیریت"
@@ -1363,6 +1436,128 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+      {/* Modal: Server & Database Connection Settings */}
+      {showServerModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-scale-up border border-rose-100 text-right">
+            <button
+              onClick={() => setShowServerModal(false)}
+              className="absolute left-4 top-4 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <Database className="w-5 h-5 text-rose-600" />
+              <h3 className="font-extrabold text-base text-slate-800">اتصال به بک‌اند PHP و دیتابیس MySQL</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              تنظیم آدرس دامنه سرور بک‌اند و بررسی وضعیت گواهی SSL و همگام‌سازی پاسخ‌ها:
+            </p>
+
+            {/* Live Ping Status Card */}
+            <div className={`p-3.5 rounded-2xl border mb-4 text-xs ${
+              isPingingServer 
+                ? 'bg-slate-50 border-slate-200 text-slate-600'
+                : serverPingResult?.online 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}>
+              {isPingingServer ? (
+                <div className="flex items-center gap-2 font-bold">
+                  <RefreshCw className="w-4 h-4 animate-spin text-rose-600" />
+                  <span>در حال تست ارتباط با سرور...</span>
+                </div>
+              ) : serverPingResult?.online ? (
+                <div className="space-y-1">
+                  <div className="font-extrabold flex items-center gap-1.5 text-emerald-700">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>اتصال به سرور و دیتابیس برقرار است!</span>
+                  </div>
+                  <p className="text-[11px]">
+                    نسخه PHP: <code className="font-mono font-bold">{serverPingResult.phpVersion}</code> | جداول فعال: <code className="font-mono font-bold">{serverPingResult.tablesCount}</code>
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="font-extrabold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>عدم دسترسی مستقیم به بک‌اند</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    {serverPingResult?.error || 'سرور پاسخ نداد. پاسخ‌ها به صورت امن در حافظه محلی ذخیره می‌شوند تا زمان اتصال همگام‌سازی شوند.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">آدرس API بک‌اند:</label>
+                <input
+                  type="text"
+                  value={apiUrlInput}
+                  onChange={(e) => setApiUrlInput(e.target.value)}
+                  placeholder="https://torqyra.duckdns.org/api"
+                  dir="ltr"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-rose-400 outline-none font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleTestServerConnection(apiUrlInput)}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#e54576] to-[#b76e79] text-white font-bold text-xs shadow-sm transition"
+                >
+                  ذخیره آدرس و تست اتصال
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const def = 'https://torqyra.duckdns.org/api';
+                    setApiUrlInput(def);
+                    handleTestServerConnection(def);
+                  }}
+                  className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+                >
+                  پیش‌فرض
+                </button>
+              </div>
+
+              {/* Pending offline sync section */}
+              {surveyApi.getPendingSyncCount() > 0 && (
+                <div className="pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isSyncingPending}
+                    onClick={handleSyncPendingData}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-1.5"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>
+                      {isSyncingPending 
+                        ? 'در حال ارسال...' 
+                        : `همگام‌سازی ${surveyApi.getPendingSyncCount()} پاسخ ذخیره شده با دیتابیس`}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {syncResultMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+                  {syncResultMsg}
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 leading-relaxed">
+                <strong>نکته مهم SSL:</strong> چون سایت گیت‌هاب پیجز روی HTTPS اجرا می‌شود، مرورگرها درخواست به آدرس‌های بدون SSL (HTTP) را مسدود می‌کنند. در صورت خطای SSL، فرانت‌اند به صورت خودکار داده‌ها را حفظ می‌کند تا با فعال‌سازی SSL رایگان (Cloudflare یا Let's Encrypt) روی دامنه خود، آن‌ها را به دیتابیس منتقل کنید.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User Answers Detail Modal */}
       <UserAnswersModal
         isOpen={!!selectedLeadForDetail}
